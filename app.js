@@ -1,10 +1,5 @@
 /*************************************************
  * Quiz Roulette – BLE (Web Bluetooth) + TOKEN
- * - Google Apps Script(JSONP)에서 6문항 로드
- * - 오답 시 직전 문제 잠금
- * - 정답 시 룰렛 버튼 활성화
- * - BLE UART로 "PING:TOKEN\n" → "PONG:TOKEN\n" 확인
- * - BLE UART로 "SPIN:TOKEN\n" 전송
  *************************************************/
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
@@ -13,13 +8,13 @@ const JSONP_CALLBACK = "onQuestionsLoaded";
 // ⭐ micro:bit 코드의 TOKEN과 동일해야 함
 const TOKEN = "A1";
 
-// BLE UART UUIDs (Nordic UART Service)
+// BLE UART UUIDs (Nordic UART Service) - 소문자 유지
 const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-const NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write
-const NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // notify
+const NUS_RX_CHARACTERISTIC = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // 앱 -> 마이크로비트 (Write)
+const NUS_TX_CHARACTERISTIC = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // 마이크로비트 -> 앱 (Notify)
 
 // =====================
-// DOM
+// DOM Elements
 // =====================
 const elStatus = document.getElementById("statusText");
 const elLock = document.getElementById("lockText");
@@ -34,7 +29,7 @@ const questionText = document.getElementById("questionText");
 const feedback = document.getElementById("feedback");
 
 const btnBack = document.getElementById("btnBack");
-const btnRetry = document.getElementById("btnRetry");
+// const btnRetry = document.getElementById("btnRetry"); // 💡 오답 잠금 규칙을 위해 재시도 버튼 제거 권장
 const btnSpin = document.getElementById("btnSpin");
 
 const btnConnect = document.getElementById("btnConnect");
@@ -64,6 +59,7 @@ let bleVerified = false;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+let bleRxBuffer = ""; // 버퍼 전역 변수
 
 // =====================
 // Init
@@ -117,7 +113,11 @@ function goPick() {
   canSpin = false;
   setSpinEnabled(false);
   feedback.textContent = "";
-  btnRetry.classList.add("hidden");
+  
+  // HTML에서 btnRetry 관련 요소가 있다면 숨김 처리
+  const retryBtn = document.getElementById("btnRetry");
+  if(retryBtn) retryBtn.classList.add("hidden");
+
   setBackHint(false);
 
   screenQuiz.classList.add("hidden");
@@ -134,7 +134,10 @@ function goQuiz(id) {
   canSpin = false;
   setSpinEnabled(false);
   feedback.textContent = "";
-  btnRetry.classList.add("hidden");
+  
+  const retryBtn = document.getElementById("btnRetry");
+  if(retryBtn) retryBtn.classList.add("hidden");
+  
   setBackHint(false);
 
   screenPick.classList.add("hidden");
@@ -148,12 +151,13 @@ function goQuiz(id) {
     const c = btn.dataset.choice;
     choiceTexts[idx].textContent = choices[c] || "";
     btn.disabled = false;
+    btn.className = btn.className.replace("opacity-50", ""); // 초기화
     btn.onclick = () => handleChoice(c);
   });
 }
 
 // =====================
-// Render pick grid (1~6)
+// Render pick grid
 // =====================
 function renderPick() {
   const colors = [
@@ -174,15 +178,19 @@ function renderPick() {
 
     const btn = document.createElement("button");
     btn.className =
-      `tap h-28 md:h-48 rounded-2xl shadow-lg text-5xl md:text-7xl font-extrabold flex items-center justify-center ${colors[id - 1]}`;
+      `tap h-28 md:h-48 rounded-2xl shadow-lg text-5xl md:text-7xl font-extrabold flex items-center justify-center ${colors[(id - 1) % 6]}`;
 
     if (!exists || locked) {
       btn.disabled = true;
       btn.classList.add("disabled-look");
+      // 잠금 아이콘 추가
+      if (locked) btn.innerHTML = "🔒";
+      else btn.textContent = String(id);
+    } else {
+      btn.textContent = String(id);
+      btn.onclick = () => goQuiz(id);
     }
-
-    btn.textContent = String(id);
-    btn.onclick = () => goQuiz(id);
+    
     gridButtons.appendChild(btn);
   }
 }
@@ -198,7 +206,7 @@ function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if (!q) return;
 
-  // 중복 클릭 방지
+  // 모든 버튼 비활성화 (중복 클릭 방지)
   choiceBtns.forEach(b => (b.disabled = true));
 
   if (choice === q.answer) {
@@ -210,8 +218,6 @@ function handleChoice(choice) {
 
     canSpin = true;
     setSpinEnabled(true);
-
-    btnRetry.classList.add("hidden");
     setBackHint(false);
   } else {
     feedback.textContent = "❌ 오답! 다른 문제를 선택해 보세요.";
@@ -222,8 +228,9 @@ function handleChoice(choice) {
 
     canSpin = false;
     setSpinEnabled(false);
-
-    btnRetry.classList.remove("hidden");
+    
+    // 💡 오답 시 재시도 버튼(btnRetry)을 보여주면 '잠금' 의미가 퇴색되므로
+    // 무조건 '다른 문제 선택'을 유도합니다.
     setBackHint(true);
   }
 }
@@ -239,7 +246,7 @@ function setBackHint(isWrong) {
   if (isWrong) {
     btnBack.className =
       "tap h-11 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-extrabold shadow shake";
-    btnBack.textContent = "다른 문제 선택하기";
+    btnBack.textContent = "⬅ 다른 문제 선택하기";
     setTimeout(() => btnBack.classList.remove("shake"), 600);
   } else {
     btnBack.className =
@@ -249,14 +256,15 @@ function setBackHint(isWrong) {
 }
 
 // =====================
-// BLE: connect / disconnect / verify / send
+// BLE Logic (핵심 수정)
 // =====================
 btnConnect.addEventListener("click", async () => {
   try {
     await bleConnectAndVerify();
   } catch (e) {
     console.error(e);
-    alert("BLE 연결 실패. 위치/권한/다른 앱 연결 여부 확인");
+    // 에러 상세 표시
+    alert(`BLE 연결 실패: ${e.message}\n(위치 켜짐/권한 허용 확인필요)`);
     setStatus("연결 실패");
   }
 });
@@ -267,50 +275,62 @@ btnDisconnect.addEventListener("click", async () => {
 
 async function bleConnectAndVerify() {
   if (!navigator.bluetooth) {
-    alert("이 브라우저는 Web Bluetooth를 지원하지 않습니다. (Android Chrome 권장)");
+    alert("이 브라우저는 블루투스를 지원하지 않습니다.\n안드로이드 Chrome을 사용해주세요.");
     return;
   }
 
-  setStatus("BLE 장치 선택 중… (micro:bit 앱 연결은 끊어주세요)");
+  setStatus("장치 검색 중... (목록에서 선택)");
   bleVerified = false;
 
+  // 💡 [수정] 필터 이름을 'BBC micro:bit'로 구체화하여 검색 정확도 향상
   bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: "micro:bit" }],
+    filters: [{ namePrefix: "BBC micro:bit" }], 
     optionalServices: [NUS_SERVICE],
   });
+  
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
 
+  setStatus("서버 연결 중...");
   bleServer = await bleDevice.gatt.connect();
-  uartService = await bleServer.getPrimaryService(NUS_SERVICE);
-  uartRX = await uartService.getCharacteristic(NUS_RX);
-  uartTX = await uartService.getCharacteristic(NUS_TX);
 
+  setStatus("서비스 찾는 중...");
+  uartService = await bleServer.getPrimaryService(NUS_SERVICE);
+
+  setStatus("특성(RX/TX) 연결 중...");
+  uartRX = await uartService.getCharacteristic(NUS_RX_CHARACTERISTIC);
+  uartTX = await uartService.getCharacteristic(NUS_TX_CHARACTERISTIC);
+
+  // 알림 시작 (데이터 수신)
   await uartTX.startNotifications();
   uartTX.addEventListener("characteristicvaluechanged", handleBleNotify);
 
   bleConnected = true;
   btnDisconnect.classList.remove("hidden");
+  btnConnect.classList.add("hidden"); // 연결 버튼 숨김
 
-  setStatus("BLE 연결됨 → 인증 중…");
+  setStatus("인증 확인 중 (PING)...");
 
   // ---- 토큰 인증 (PING → PONG) ----
+  // 버퍼 초기화
+  bleRxBuffer = ""; 
+  
   await bleSendLine(`PING:${TOKEN}`);
-  const ok = await waitForPong(1500);
+  
+  const ok = await waitForPong(2500); // 타임아웃 2.5초로 넉넉하게
   if (!ok) {
-    alert("연결된 micro:bit가 우리 기기(TOKEN)와 일치하지 않아요. 다시 선택해 주세요.");
+    alert(`연결은 됐지만 인증에 실패했습니다.\n설정된 토큰(${TOKEN})이 일치하지 않습니다.`);
     await bleDisconnect();
     return;
   }
 
   bleVerified = true;
-  setStatus("✅ BLE 연결 + 인증 완료");
+  setStatus("✅ 연결 및 인증 완료!");
 }
 
 function handleBleNotify(e) {
   const msg = decoder.decode(e.target.value);
-  // 여러 조각으로 올 수 있으니 줄 단위로 누적 처리
   bleRxBuffer += msg;
-  // 줄바꿈 기준 처리
+  
   let idx;
   while ((idx = bleRxBuffer.indexOf("\n")) >= 0) {
     const line = bleRxBuffer.slice(0, idx).trim();
@@ -319,12 +339,11 @@ function handleBleNotify(e) {
   }
 }
 
-let bleRxBuffer = "";
 let lastPongAt = 0;
 
 function onBleLine(line) {
-  console.log("[micro:bit]", line);
-  if (line === `PONG:${TOKEN}`) {
+  console.log("[RX]", line);
+  if (line.includes(`PONG:${TOKEN}`)) {
     lastPongAt = Date.now();
   }
 }
@@ -333,9 +352,8 @@ async function waitForPong(timeoutMs) {
   const start = Date.now();
   lastPongAt = 0;
   while (Date.now() - start < timeoutMs) {
-    // PONG가 들어오면 lastPongAt 찍힘
-    if (lastPongAt && (Date.now() - lastPongAt < 5000)) return true;
-    await sleep(50);
+    if (lastPongAt > start) return true; // 응답 받음
+    await sleep(100);
   }
   return false;
 }
@@ -356,12 +374,15 @@ function onBleDisconnected() {
   uartRX = null;
   uartTX = null;
   bleRxBuffer = "";
+  
   btnDisconnect.classList.add("hidden");
-  setStatus("BLE 연결 끊김");
+  btnConnect.classList.remove("hidden");
+  setStatus("대기 중 (연결 끊김)");
 }
 
 async function bleSendLine(text) {
-  if (!uartRX) throw new Error("UART RX not ready");
+  if (!uartRX) throw new Error("UART RX 준비안됨");
+  // 마이크로비트가 줄바꿈(\n)을 받아야 명령을 인식함
   await uartRX.writeValue(encoder.encode(text + "\n"));
 }
 
@@ -372,16 +393,26 @@ btnSpin.addEventListener("click", async () => {
   if (!canSpin) return;
 
   if (!bleConnected || !bleVerified) {
-    alert("BLE 연결(인증)이 필요해요. 상단 [연결]을 눌러 주세요.");
+    alert("블루투스가 연결되지 않았습니다. [연결] 버튼을 눌러주세요.");
     return;
   }
 
   try {
+    // 중복 전송 방지
+    btnSpin.disabled = true;
     await bleSendLine(`SPIN:${TOKEN}`);
-    setStatus("🎡 룰렛 신호 전송!");
+    setStatus("🎡 룰렛 돌아가는 중...");
+    
+    // 3초 후 버튼 상태 복구 (원하면 영구 비활성 가능)
+    setTimeout(() => {
+        if(canSpin) btnSpin.disabled = false;
+        setStatus("✅ 연결 및 인증 완료!");
+    }, 3000);
+    
   } catch (e) {
     console.error(e);
-    alert("전송 실패. BLE 연결 상태를 확인해 주세요.");
+    alert("전송 실패. 다시 연결해주세요.");
+    onBleDisconnected();
   }
 });
 
@@ -390,12 +421,7 @@ btnSpin.addEventListener("click", async () => {
 // =====================
 btnBack.addEventListener("click", () => goPick());
 
-btnRetry.addEventListener("click", () => {
-  feedback.textContent = "";
-  btnRetry.classList.add("hidden");
-  setSpinEnabled(false);
-  choiceBtns.forEach(b => (b.disabled = false));
-});
+// btnRetry 제거: 오답 잠금 규칙을 위해 재시도 버튼 로직은 잠금
 
 // =====================
 // Utils
