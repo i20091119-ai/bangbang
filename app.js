@@ -5,10 +5,10 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
 const JSONP_CALLBACK = "onQuestionsLoaded";
 
-// ⭐ micro:bit 코드의 TOKEN과 동일해야 함
+// ⭐ [중요] micro:bit 코드의 TOKEN과 글자 하나까지 똑같아야 작동합니다!
 const TOKEN = "A1";
 
-// BLE UART UUIDs (Nordic UART Service) - 소문자 유지
+// BLE UART UUIDs (Nordic UART Service) - 소문자 표준
 const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const NUS_RX_CHARACTERISTIC = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // 앱 -> 마이크로비트 (Write)
 const NUS_TX_CHARACTERISTIC = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // 마이크로비트 -> 앱 (Notify)
@@ -29,7 +29,7 @@ const questionText = document.getElementById("questionText");
 const feedback = document.getElementById("feedback");
 
 const btnBack = document.getElementById("btnBack");
-// const btnRetry = document.getElementById("btnRetry"); // 💡 오답 잠금 규칙을 위해 재시도 버튼 제거 권장
+// const btnRetry = document.getElementById("btnRetry"); // 오답 잠금 규칙을 위해 사용 안 함
 const btnSpin = document.getElementById("btnSpin");
 
 const btnConnect = document.getElementById("btnConnect");
@@ -59,7 +59,7 @@ let bleVerified = false;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-let bleRxBuffer = ""; // 버퍼 전역 변수
+let bleRxBuffer = ""; // 데이터 수신 버퍼
 
 // =====================
 // Init
@@ -114,7 +114,7 @@ function goPick() {
   setSpinEnabled(false);
   feedback.textContent = "";
   
-  // HTML에서 btnRetry 관련 요소가 있다면 숨김 처리
+  // Retry 버튼 숨김 (오답 시 뒤로가기 강제)
   const retryBtn = document.getElementById("btnRetry");
   if(retryBtn) retryBtn.classList.add("hidden");
 
@@ -151,7 +151,8 @@ function goQuiz(id) {
     const c = btn.dataset.choice;
     choiceTexts[idx].textContent = choices[c] || "";
     btn.disabled = false;
-    btn.className = btn.className.replace("opacity-50", ""); // 초기화
+    // 이전에 흐리게 처리된 스타일 제거
+    btn.className = btn.className.replace("opacity-50", "");
     btn.onclick = () => handleChoice(c);
   });
 }
@@ -183,9 +184,10 @@ function renderPick() {
     if (!exists || locked) {
       btn.disabled = true;
       btn.classList.add("disabled-look");
-      // 잠금 아이콘 추가
-      if (locked) btn.innerHTML = "🔒";
+      
+      if (locked) btn.innerHTML = "🔒"; // 잠김 표시
       else btn.textContent = String(id);
+      
     } else {
       btn.textContent = String(id);
       btn.onclick = () => goQuiz(id);
@@ -228,9 +230,6 @@ function handleChoice(choice) {
 
     canSpin = false;
     setSpinEnabled(false);
-    
-    // 💡 오답 시 재시도 버튼(btnRetry)을 보여주면 '잠금' 의미가 퇴색되므로
-    // 무조건 '다른 문제 선택'을 유도합니다.
     setBackHint(true);
   }
 }
@@ -256,15 +255,15 @@ function setBackHint(isWrong) {
 }
 
 // =====================
-// BLE Logic (핵심 수정)
+// BLE Logic (수정된 핵심 부분)
 // =====================
 btnConnect.addEventListener("click", async () => {
   try {
     await bleConnectAndVerify();
   } catch (e) {
     console.error(e);
-    // 에러 상세 표시
-    alert(`BLE 연결 실패: ${e.message}\n(위치 켜짐/권한 허용 확인필요)`);
+    // 사용자 친화적 에러 메시지
+    alert(`연결할 수 없습니다.\n\n[원인]\n- 취소 버튼을 누름\n- 또는 이미 다른 앱에 연결됨\n- 에러: ${e.message}`);
     setStatus("연결 실패");
   }
 });
@@ -275,50 +274,55 @@ btnDisconnect.addEventListener("click", async () => {
 
 async function bleConnectAndVerify() {
   if (!navigator.bluetooth) {
-    alert("이 브라우저는 블루투스를 지원하지 않습니다.\n안드로이드 Chrome을 사용해주세요.");
+    alert("이 브라우저는 블루투스를 지원하지 않습니다.\n안드로이드 Chrome을 권장합니다.");
     return;
   }
 
-  setStatus("장치 검색 중... (목록에서 선택)");
+  setStatus("장치 검색 중... 목록에서 'BBC micro:bit'를 선택하세요.");
   bleVerified = false;
 
-  // 💡 [수정] 필터 이름을 'BBC micro:bit'로 구체화하여 검색 정확도 향상
- bleDevice = await navigator.bluetooth.requestDevice({
-  acceptAllDevices: true, 
-  optionalServices: [NUS_SERVICE]
+  // ✅ [최종 수정] 갤럭시탭에서 확실하게 'BBC micro:bit'를 찾도록 필터 적용
+  bleDevice = await navigator.bluetooth.requestDevice({
+    filters: [
+      { namePrefix: "BBC micro:bit" }, 
+      { namePrefix: "micro:bit" }
+    ],
+    optionalServices: [NUS_SERVICE]
   });
   
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
 
-  setStatus("서버 연결 중...");
+  setStatus("서버에 연결 중...");
   bleServer = await bleDevice.gatt.connect();
 
-  setStatus("서비스 찾는 중...");
+  setStatus("서비스(UART) 찾는 중...");
   uartService = await bleServer.getPrimaryService(NUS_SERVICE);
 
-  setStatus("특성(RX/TX) 연결 중...");
+  setStatus("통신 채널 연결 중...");
   uartRX = await uartService.getCharacteristic(NUS_RX_CHARACTERISTIC);
   uartTX = await uartService.getCharacteristic(NUS_TX_CHARACTERISTIC);
 
-  // 알림 시작 (데이터 수신)
+  // 데이터 수신 시작
   await uartTX.startNotifications();
   uartTX.addEventListener("characteristicvaluechanged", handleBleNotify);
 
   bleConnected = true;
+  
+  // UI 전환
+  btnConnect.classList.add("hidden");
   btnDisconnect.classList.remove("hidden");
-  btnConnect.classList.add("hidden"); // 연결 버튼 숨김
 
-  setStatus("인증 확인 중 (PING)...");
+  setStatus("연결됨! 토큰 인증 중 (PING)...");
 
   // ---- 토큰 인증 (PING → PONG) ----
-  // 버퍼 초기화
-  bleRxBuffer = ""; 
+  bleRxBuffer = ""; // 버퍼 초기화
   
   await bleSendLine(`PING:${TOKEN}`);
   
-  const ok = await waitForPong(2500); // 타임아웃 2.5초로 넉넉하게
+  // 2.5초 내에 PONG 응답 대기
+  const ok = await waitForPong(2500);
   if (!ok) {
-    alert(`연결은 됐지만 인증에 실패했습니다.\n설정된 토큰(${TOKEN})이 일치하지 않습니다.`);
+    alert(`연결은 성공했지만, 인증에 실패했습니다.\n\n설정된 토큰: ${TOKEN}\n(마이크로비트 코드의 TOKEN과 일치하는지 확인하세요)`);
     await bleDisconnect();
     return;
   }
@@ -331,6 +335,7 @@ function handleBleNotify(e) {
   const msg = decoder.decode(e.target.value);
   bleRxBuffer += msg;
   
+  // 줄바꿈(\n) 단위로 잘라서 처리
   let idx;
   while ((idx = bleRxBuffer.indexOf("\n")) >= 0) {
     const line = bleRxBuffer.slice(0, idx).trim();
@@ -343,6 +348,7 @@ let lastPongAt = 0;
 
 function onBleLine(line) {
   console.log("[RX]", line);
+  // PONG 체크
   if (line.includes(`PONG:${TOKEN}`)) {
     lastPongAt = Date.now();
   }
@@ -352,7 +358,8 @@ async function waitForPong(timeoutMs) {
   const start = Date.now();
   lastPongAt = 0;
   while (Date.now() - start < timeoutMs) {
-    if (lastPongAt > start) return true; // 응답 받음
+    // start 이후에 응답을 받았다면 OK
+    if (lastPongAt > start) return true;
     await sleep(100);
   }
   return false;
@@ -381,8 +388,8 @@ function onBleDisconnected() {
 }
 
 async function bleSendLine(text) {
-  if (!uartRX) throw new Error("UART RX 준비안됨");
-  // 마이크로비트가 줄바꿈(\n)을 받아야 명령을 인식함
+  if (!uartRX) throw new Error("UART 전송 불가 (연결 안됨)");
+  // 마이크로비트는 끝에 \n이 있어야 명령으로 인식
   await uartRX.writeValue(encoder.encode(text + "\n"));
 }
 
@@ -393,25 +400,26 @@ btnSpin.addEventListener("click", async () => {
   if (!canSpin) return;
 
   if (!bleConnected || !bleVerified) {
-    alert("블루투스가 연결되지 않았습니다. [연결] 버튼을 눌러주세요.");
+    alert("블루투스가 연결되지 않았습니다. 상단 [연결] 버튼을 눌러주세요.");
     return;
   }
 
   try {
     // 중복 전송 방지
     btnSpin.disabled = true;
+    
     await bleSendLine(`SPIN:${TOKEN}`);
     setStatus("🎡 룰렛 돌아가는 중...");
     
-    // 3초 후 버튼 상태 복구 (원하면 영구 비활성 가능)
+    // 3초 후 버튼 상태 복구 (다음 퀴즈를 위해)
+    // 하지만 현재 로직상 다음 문제로 가야 활성화되므로 여기서는 메시지만 복구
     setTimeout(() => {
-        if(canSpin) btnSpin.disabled = false;
         setStatus("✅ 연결 및 인증 완료!");
     }, 3000);
     
   } catch (e) {
     console.error(e);
-    alert("전송 실패. 다시 연결해주세요.");
+    alert("명령 전송 실패. 연결을 확인해주세요.");
     onBleDisconnected();
   }
 });
@@ -420,8 +428,6 @@ btnSpin.addEventListener("click", async () => {
 // Other buttons
 // =====================
 btnBack.addEventListener("click", () => goPick());
-
-// btnRetry 제거: 오답 잠금 규칙을 위해 재시도 버튼 로직은 잠금
 
 // =====================
 // Utils
@@ -433,4 +439,3 @@ function setStatus(t) {
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
-
