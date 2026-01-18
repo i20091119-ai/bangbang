@@ -282,12 +282,9 @@ async function bleConnectAndVerify() {
   bleVerified = false;
 
   // ✅ [최종 수정] 갤럭시탭에서 확실하게 'BBC micro:bit'를 찾도록 필터 적용
-  bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [
-      { namePrefix: "BBC micro:bit" }, 
-      { namePrefix: "micro:bit" }
-    ],
-    optionalServices: [NUS_SERVICE]
+ bleDevice = await navigator.bluetooth.requestDevice({
+  acceptAllDevices: true, 
+  optionalServices: [NUS_SERVICE]
   });
   
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
@@ -439,3 +436,4 @@ function setStatus(t) {
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
+
