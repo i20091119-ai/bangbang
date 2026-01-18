@@ -1,9 +1,11 @@
 /***********************
  * 설정
  ***********************/
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec"; // ← 반드시 수정
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
 const JSONP_CALLBACK = "onQuestionsLoaded";
-const SPIN_COMMAND = "SPIN\n";
+
+// ✅ 문자열 → 바이트 변환기 (Android Web Serial 필수)
+const encoder = new TextEncoder();
 
 /***********************
  * 상태
@@ -15,7 +17,6 @@ let canSpin = false;
 
 // Web Serial
 let port = null;
-let writer = null;
 
 /***********************
  * DOM
@@ -44,26 +45,29 @@ const btnDisconnect = document.getElementById("btnDisconnect");
  ***********************/
 loadQuestions();
 
-btnBack.addEventListener("click", () => {
-  goPick();
-});
+btnBack.addEventListener("click", () => goPick());
 
 btnRetry.addEventListener("click", () => {
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
   setSpinEnabled(false);
+  // 보기 버튼 다시 활성화
+  document.querySelectorAll(".choiceBtn").forEach(b => (b.disabled = false));
 });
 
 btnSpin.addEventListener("click", async () => {
   if (!canSpin) return;
-
-  if (!port || !writer) {
+  if (!port) {
     alert("micro:bit(USB) 연결이 필요해요. 상단의 [연결] 버튼을 눌러 주세요.");
     return;
   }
 
   try {
-    await writer.write(SPIN_COMMAND);
+    // ✅ 쓸 때마다 writer를 얻고 바로 release (안정성)
+    const writer = port.writable.getWriter();
+    await writer.write(encoder.encode("SPIN\n"));
+    writer.releaseLock();
+
     feedback.textContent = "🎡 룰렛이 돌아갑니다!";
   } catch (e) {
     console.error(e);
@@ -77,11 +81,6 @@ btnSpin.addEventListener("click", async () => {
 function loadQuestions() {
   elStatus.textContent = "문항 불러오는 중…";
 
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("PUT_YOUR_WEBAPP_URL_HERE")) {
-    elStatus.textContent = "⚠️ APPS_SCRIPT_URL을 app.js에 입력해 주세요.";
-    return;
-  }
-
   window[JSONP_CALLBACK] = (data) => {
     questions = normalizeQuestions(data);
     elStatus.textContent = `문항 ${questions.length}개 로드 완료`;
@@ -92,23 +91,21 @@ function loadQuestions() {
 
   const script = document.createElement("script");
   script.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
-  script.onerror = () => {
-    elStatus.textContent = "문항 로드 실패(URL/네트워크 확인)";
-  };
+  script.onerror = () => (elStatus.textContent = "문항 로드 실패(URL/네트워크 확인)");
   document.body.appendChild(script);
 }
 
 function normalizeQuestions(data) {
-  return data
-    .filter(q => q && q.enabled === true)
-    .map(q => ({
+  return (Array.isArray(data) ? data : [])
+    .filter((q) => q && q.enabled === true)
+    .map((q) => ({
       id: Number(q.id),
       question: String(q.question || ""),
       choiceA: String(q.choiceA || ""),
       choiceB: String(q.choiceB || ""),
       choiceC: String(q.choiceC || ""),
       choiceD: String(q.choiceD || ""),
-      answer: String(q.answer || "A").toUpperCase().trim()
+      answer: String(q.answer || "A").toUpperCase().trim(),
     }))
     .sort((a, b) => a.id - b.id);
 }
@@ -129,7 +126,7 @@ function goPick() {
 }
 
 function goQuiz(id) {
-  const q = questions.find(x => x.id === id);
+  const q = questions.find((x) => x.id === id);
   if (!q) return;
 
   selectedId = id;
@@ -143,15 +140,15 @@ function goQuiz(id) {
   questionText.textContent = q.question;
 
   const btns = document.querySelectorAll(".choiceBtn");
-  btns.forEach(btn => {
+  btns.forEach((btn) => {
     const c = btn.dataset.choice;
     btn.textContent =
       c === "A" ? q.choiceA :
       c === "B" ? q.choiceB :
       c === "C" ? q.choiceC :
       q.choiceD;
+
     btn.disabled = false;
-    btn.classList.remove("opacity-50");
     btn.onclick = () => handleChoice(c);
   });
 
@@ -173,21 +170,21 @@ function renderPick() {
     "bg-lime-200 hover:bg-lime-300",
   ];
 
-  const hasIds = new Set(questions.map(q => q.id));
+  const hasIds = new Set(questions.map((q) => q.id));
   gridButtons.innerHTML = "";
 
   for (let id = 1; id <= 6; id++) {
     const exists = hasIds.has(id);
-    const locked = (lastWrongId === id);
-    const btn = document.createElement("button");
+    const locked = lastWrongId === id;
 
+    const btn = document.createElement("button");
     btn.className =
-      `h-24 md:h-40 rounded-2xl shadow-lg text-4xl md:text-6xl font-extrabold 
-       flex items-center justify-center ${colors[id - 1]}`;
+      `h-24 md:h-40 rounded-2xl shadow-lg text-4xl md:text-6xl font-extrabold flex items-center justify-center ${colors[id - 1]}`;
 
     if (!exists || locked) {
       btn.disabled = true;
       btn.classList.add("opacity-40");
+      btn.title = !exists ? "문항이 비활성/없음" : "직전 오답 문항은 잠깐 잠금";
     }
 
     btn.textContent = String(id);
@@ -202,10 +199,11 @@ function renderPick() {
  * 채점
  ***********************/
 function handleChoice(choice) {
-  const q = questions.find(x => x.id === selectedId);
+  const q = questions.find((x) => x.id === selectedId);
   if (!q) return;
 
-  document.querySelectorAll(".choiceBtn").forEach(b => b.disabled = true);
+  // 중복 클릭 방지
+  document.querySelectorAll(".choiceBtn").forEach((b) => (b.disabled = true));
 
   if (choice === q.answer) {
     feedback.textContent = "✅ 정답! 룰렛을 돌릴 수 있어요.";
@@ -227,13 +225,14 @@ function handleChoice(choice) {
 
     canSpin = false;
     setSpinEnabled(false);
+
     btnRetry.classList.remove("hidden");
     setBackHint(true);
   }
 }
 
 /***********************
- * 버튼 상태 제어
+ * 버튼 상태/힌트
  ***********************/
 function setSpinEnabled(enabled) {
   btnSpin.disabled = !enabled;
@@ -246,15 +245,12 @@ function updateLockText() {
   elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음";
 }
 
-/***********************
- * ⭐ 오답 힌트: 색 변경 + 흔들기
- ***********************/
+// 오답 힌트: 색 + 흔들기 (index.html에 .nudge 애니메이션이 있어야 함)
 function setBackHint(isWrong) {
   if (isWrong) {
     btnBack.className =
       "h-11 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-extrabold shadow nudge";
     btnBack.textContent = "다른 문제 선택하기";
-
     setTimeout(() => btnBack.classList.remove("nudge"), 600);
   } else {
     btnBack.className =
@@ -264,33 +260,34 @@ function setBackHint(isWrong) {
 }
 
 /***********************
- * Web Serial (유선)
+ * Web Serial 연결/해제
  ***********************/
 btnConnect.addEventListener("click", async () => {
   if (!("serial" in navigator)) {
-    alert("이 브라우저는 Clermont Serial을 지원하지 않아요.");
+    alert("이 브라우저는 Web Serial을 지원하지 않아요. (Chrome 최신 권장)");
     return;
   }
 
   try {
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
-    writer = port.writable.getWriter();
 
     btnDisconnect.classList.remove("hidden");
     elStatus.textContent = "✅ micro:bit 유선 연결됨";
   } catch (e) {
-    alert("연결 실패. 케이블/권한 확인");
+    console.error(e);
+    alert("연결 실패. OTG/케이블/권한을 확인해 주세요.");
   }
 });
 
 btnDisconnect.addEventListener("click", async () => {
   try {
-    if (writer) writer.releaseLock();
     if (port) await port.close();
-  } catch {}
-  writer = null;
-  port = null;
-  btnDisconnect.classList.add("hidden");
-  elStatus.textContent = "연결 해제됨";
+  } catch (e) {
+    console.error(e);
+  } finally {
+    port = null;
+    btnDisconnect.classList.add("hidden");
+    elStatus.textContent = "연결 해제됨";
+  }
 });
