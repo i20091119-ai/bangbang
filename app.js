@@ -283,9 +283,9 @@ async function bleConnectAndVerify() {
   bleVerified = false;
 
   // 💡 [수정] 필터 이름을 'BBC micro:bit'로 구체화하여 검색 정확도 향상
-  bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: "BBC micro:bit" }], 
-    optionalServices: [NUS_SERVICE],
+ bleDevice = await navigator.bluetooth.requestDevice({
+  acceptAllDevices: true, 
+  optionalServices: [NUS_SERVICE]
   });
   
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
@@ -433,3 +433,4 @@ function setStatus(t) {
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
+
