@@ -1,10 +1,26 @@
-/***********************
- * Quiz Roulette (BLE)
- ***********************/
+/*************************************************
+ * Quiz Roulette – BLE (Web Bluetooth) + TOKEN
+ * - Google Apps Script(JSONP)에서 6문항 로드
+ * - 오답 시 직전 문제 잠금
+ * - 정답 시 룰렛 버튼 활성화
+ * - BLE UART로 "PING:TOKEN\n" → "PONG:TOKEN\n" 확인
+ * - BLE UART로 "SPIN:TOKEN\n" 전송
+ *************************************************/
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
 const JSONP_CALLBACK = "onQuestionsLoaded";
 
+// ⭐ micro:bit 코드의 TOKEN과 동일해야 함
+const TOKEN = "A1";
+
+// BLE UART UUIDs (Nordic UART Service)
+const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write
+const NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // notify
+
+// =====================
 // DOM
+// =====================
 const elStatus = document.getElementById("statusText");
 const elLock = document.getElementById("lockText");
 
@@ -27,92 +43,46 @@ const btnDisconnect = document.getElementById("btnDisconnect");
 const choiceBtns = Array.from(document.querySelectorAll(".choiceBtn"));
 const choiceTexts = Array.from(document.querySelectorAll(".choiceText"));
 
+// =====================
 // State
+// =====================
 let questions = [];
 let selectedId = null;
 let lastWrongId = null;
 let canSpin = false;
 
-// ============= BLE (Web Bluetooth) =============
+// =====================
+// BLE State
+// =====================
 let bleDevice = null;
 let bleServer = null;
 let uartService = null;
 let uartRX = null;
 let uartTX = null;
+let bleConnected = false;
+let bleVerified = false;
+
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
-// Nordic UART Service UUIDs (micro:bit UART)
-const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-const NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write
-const NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // notify
-
-async function bleConnect() {
-  if (!navigator.bluetooth) {
-    alert("이 브라우저는 Web Bluetooth를 지원하지 않습니다. (Android Chrome 권장)");
-    return;
-  }
-
-  elStatus.textContent = "BLE 장치 선택 중… (micro:bit 앱 연결은 끊어주세요)";
-  bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ namePrefix: "micro:bit" }], // 권장: micro:bit 이름을 ROULETTE-로 바꾸면 namePrefix도 바꾸기
-    optionalServices: [NUS_SERVICE],
-  });
-
-  bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
-
-  bleServer = await bleDevice.gatt.connect();
-  uartService = await bleServer.getPrimaryService(NUS_SERVICE);
-  uartRX = await uartService.getCharacteristic(NUS_RX);
-  uartTX = await uartService.getCharacteristic(NUS_TX);
-
-  try {
-    await uartTX.startNotifications();
-    uartTX.addEventListener("characteristicvaluechanged", (e) => {
-      const msg = new TextDecoder().decode(e.target.value);
-      console.log("[micro:bit]", msg);
-    });
-  } catch {}
-
-  elStatus.textContent = "✅ BLE 연결됨";
-  btnDisconnect.classList.remove("hidden");
-}
-
-function onBleDisconnected() {
-  elStatus.textContent = "❌ BLE 연결 끊김";
-  bleDevice = null;
-  bleServer = null;
-  uartService = null;
-  uartRX = null;
-  uartTX = null;
-  btnDisconnect.classList.add("hidden");
-}
-
-async function bleDisconnect() {
-  try {
-    if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
-  } catch {}
-  onBleDisconnected();
-}
-
-async function bleSendSpin() {
-  if (!uartRX) {
-    alert("BLE 연결이 필요해요. 상단 [연결]을 눌러 주세요.");
-    return;
-  }
-  await uartRX.writeValue(encoder.encode("SPIN\n"));
-}
-
-// ============= Questions (JSONP) =============
+// =====================
+// Init
+// =====================
 loadQuestions();
+goPick();
+setSpinEnabled(false);
+updateLockText();
+setBackHint(false);
 
+// =====================
+// JSONP: Questions
+// =====================
 function loadQuestions() {
   elStatus.textContent = "문항 불러오는 중…";
 
   window[JSONP_CALLBACK] = (data) => {
     questions = normalizeQuestions(data);
     elStatus.textContent = `문항 ${questions.length}개 로드 완료`;
-    lastWrongId = null;
-    updateLockText();
     renderPick();
   };
 
@@ -139,52 +109,21 @@ function normalizeQuestions(data) {
     .sort((a, b) => a.id - b.id);
 }
 
-// ============= UI =============
-btnConnect.addEventListener("click", async () => {
-  try {
-    await bleConnect();
-  } catch (e) {
-    console.error(e);
-    alert("BLE 연결 실패. 위치/권한/다른 앱 연결 여부를 확인해 주세요.");
-    elStatus.textContent = "연결 실패";
-  }
-});
-
-btnDisconnect.addEventListener("click", bleDisconnect);
-
-btnBack.addEventListener("click", () => goPick());
-
-btnRetry.addEventListener("click", () => {
-  feedback.textContent = "";
-  btnRetry.classList.add("hidden");
-  setSpinEnabled(false);
-
-  // 보기 다시 선택 가능
-  choiceBtns.forEach(b => (b.disabled = false));
-});
-
-btnSpin.addEventListener("click", async () => {
-  if (!canSpin) return;
-
-  try {
-    await bleSendSpin();
-    feedback.textContent = "🎡 룰렛이 돌아갑니다!";
-  } catch (e) {
-    console.error(e);
-    alert("전송 실패. BLE 연결 상태를 확인해 주세요.");
-  }
-});
-
+// =====================
+// UI navigation
+// =====================
 function goPick() {
   selectedId = null;
   canSpin = false;
   setSpinEnabled(false);
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
+  setBackHint(false);
 
   screenQuiz.classList.add("hidden");
   screenPick.classList.remove("hidden");
   renderPick();
+  updateLockText();
 }
 
 function goQuiz(id) {
@@ -194,6 +133,9 @@ function goQuiz(id) {
   selectedId = id;
   canSpin = false;
   setSpinEnabled(false);
+  feedback.textContent = "";
+  btnRetry.classList.add("hidden");
+  setBackHint(false);
 
   screenPick.classList.add("hidden");
   screenQuiz.classList.remove("hidden");
@@ -208,12 +150,11 @@ function goQuiz(id) {
     btn.disabled = false;
     btn.onclick = () => handleChoice(c);
   });
-
-  feedback.textContent = "";
-  btnRetry.classList.add("hidden");
-  setBackHint(false);
 }
 
+// =====================
+// Render pick grid (1~6)
+// =====================
 function renderPick() {
   const colors = [
     "bg-rose-200 hover:bg-rose-300",
@@ -244,10 +185,15 @@ function renderPick() {
     btn.onclick = () => goQuiz(id);
     gridButtons.appendChild(btn);
   }
-
-  updateLockText();
 }
 
+function updateLockText() {
+  elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음";
+}
+
+// =====================
+// Choice handling
+// =====================
 function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if (!q) return;
@@ -289,11 +235,6 @@ function setSpinEnabled(enabled) {
     : "tap h-12 px-5 rounded-xl bg-slate-200 text-slate-600 font-extrabold shadow";
 }
 
-function updateLockText() {
-  elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음";
-}
-
-// 오답 때 “다른 문제 선택” 버튼 강조 + 흔들기
 function setBackHint(isWrong) {
   if (isWrong) {
     btnBack.className =
@@ -305,4 +246,164 @@ function setBackHint(isWrong) {
       "tap h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold";
     btnBack.textContent = "다른 문제 선택";
   }
+}
+
+// =====================
+// BLE: connect / disconnect / verify / send
+// =====================
+btnConnect.addEventListener("click", async () => {
+  try {
+    await bleConnectAndVerify();
+  } catch (e) {
+    console.error(e);
+    alert("BLE 연결 실패. 위치/권한/다른 앱 연결 여부 확인");
+    setStatus("연결 실패");
+  }
+});
+
+btnDisconnect.addEventListener("click", async () => {
+  await bleDisconnect();
+});
+
+async function bleConnectAndVerify() {
+  if (!navigator.bluetooth) {
+    alert("이 브라우저는 Web Bluetooth를 지원하지 않습니다. (Android Chrome 권장)");
+    return;
+  }
+
+  setStatus("BLE 장치 선택 중… (micro:bit 앱 연결은 끊어주세요)");
+  bleVerified = false;
+
+  bleDevice = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: "micro:bit" }],
+    optionalServices: [NUS_SERVICE],
+  });
+  bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
+
+  bleServer = await bleDevice.gatt.connect();
+  uartService = await bleServer.getPrimaryService(NUS_SERVICE);
+  uartRX = await uartService.getCharacteristic(NUS_RX);
+  uartTX = await uartService.getCharacteristic(NUS_TX);
+
+  await uartTX.startNotifications();
+  uartTX.addEventListener("characteristicvaluechanged", handleBleNotify);
+
+  bleConnected = true;
+  btnDisconnect.classList.remove("hidden");
+
+  setStatus("BLE 연결됨 → 인증 중…");
+
+  // ---- 토큰 인증 (PING → PONG) ----
+  await bleSendLine(`PING:${TOKEN}`);
+  const ok = await waitForPong(1500);
+  if (!ok) {
+    alert("연결된 micro:bit가 우리 기기(TOKEN)와 일치하지 않아요. 다시 선택해 주세요.");
+    await bleDisconnect();
+    return;
+  }
+
+  bleVerified = true;
+  setStatus("✅ BLE 연결 + 인증 완료");
+}
+
+function handleBleNotify(e) {
+  const msg = decoder.decode(e.target.value);
+  // 여러 조각으로 올 수 있으니 줄 단위로 누적 처리
+  bleRxBuffer += msg;
+  // 줄바꿈 기준 처리
+  let idx;
+  while ((idx = bleRxBuffer.indexOf("\n")) >= 0) {
+    const line = bleRxBuffer.slice(0, idx).trim();
+    bleRxBuffer = bleRxBuffer.slice(idx + 1);
+    if (line) onBleLine(line);
+  }
+}
+
+let bleRxBuffer = "";
+let lastPongAt = 0;
+
+function onBleLine(line) {
+  console.log("[micro:bit]", line);
+  if (line === `PONG:${TOKEN}`) {
+    lastPongAt = Date.now();
+  }
+}
+
+async function waitForPong(timeoutMs) {
+  const start = Date.now();
+  lastPongAt = 0;
+  while (Date.now() - start < timeoutMs) {
+    // PONG가 들어오면 lastPongAt 찍힘
+    if (lastPongAt && (Date.now() - lastPongAt < 5000)) return true;
+    await sleep(50);
+  }
+  return false;
+}
+
+async function bleDisconnect() {
+  try {
+    if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+  } catch {}
+  onBleDisconnected();
+}
+
+function onBleDisconnected() {
+  bleConnected = false;
+  bleVerified = false;
+  bleDevice = null;
+  bleServer = null;
+  uartService = null;
+  uartRX = null;
+  uartTX = null;
+  bleRxBuffer = "";
+  btnDisconnect.classList.add("hidden");
+  setStatus("BLE 연결 끊김");
+}
+
+async function bleSendLine(text) {
+  if (!uartRX) throw new Error("UART RX not ready");
+  await uartRX.writeValue(encoder.encode(text + "\n"));
+}
+
+// =====================
+// SPIN button
+// =====================
+btnSpin.addEventListener("click", async () => {
+  if (!canSpin) return;
+
+  if (!bleConnected || !bleVerified) {
+    alert("BLE 연결(인증)이 필요해요. 상단 [연결]을 눌러 주세요.");
+    return;
+  }
+
+  try {
+    await bleSendLine(`SPIN:${TOKEN}`);
+    setStatus("🎡 룰렛 신호 전송!");
+  } catch (e) {
+    console.error(e);
+    alert("전송 실패. BLE 연결 상태를 확인해 주세요.");
+  }
+});
+
+// =====================
+// Other buttons
+// =====================
+btnBack.addEventListener("click", () => goPick());
+
+btnRetry.addEventListener("click", () => {
+  feedback.textContent = "";
+  btnRetry.classList.add("hidden");
+  setSpinEnabled(false);
+  choiceBtns.forEach(b => (b.disabled = false));
+});
+
+// =====================
+// Utils
+// =====================
+function setStatus(t) {
+  elStatus.textContent = t;
+}
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
 }
