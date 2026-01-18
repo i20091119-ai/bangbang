@@ -1,25 +1,19 @@
 /***********************
  * 설정
  ***********************/
-// ✅ 여기에 STEP 1에서 나온 Apps Script "웹앱 URL" 넣기
-// 예: https://script.google.com/macros/s/XXXXX/exec
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
-
-// JSONP 콜백 이름
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec"; // ← 반드시 수정
 const JSONP_CALLBACK = "onQuestionsLoaded";
-
-// Web Serial로 micro:bit에 보낼 명령(다음 STEP에서 micro:bit 코드가 이걸 받음)
 const SPIN_COMMAND = "SPIN\n";
 
 /***********************
  * 상태
  ***********************/
-let questions = [];            // [{id, enabled, question, choiceA..D, answer}]
+let questions = [];
 let selectedId = null;
-let lastWrongId = null;        // 직전 오답 문항 잠금
+let lastWrongId = null;
 let canSpin = false;
 
-// Serial
+// Web Serial
 let port = null;
 let writer = null;
 
@@ -51,22 +45,18 @@ const btnDisconnect = document.getElementById("btnDisconnect");
 loadQuestions();
 
 btnBack.addEventListener("click", () => {
-  // 다른 문제 선택으로 이동
   goPick();
 });
 
 btnRetry.addEventListener("click", () => {
-  // 현재 문제 다시 풀기(오답 후)
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
   setSpinEnabled(false);
 });
 
 btnSpin.addEventListener("click", async () => {
-  // 정답일 때만 활성화
   if (!canSpin) return;
 
-  // 유선 연결이 안 되어 있으면 안내만
   if (!port || !writer) {
     alert("micro:bit(USB) 연결이 필요해요. 상단의 [연결] 버튼을 눌러 주세요.");
     return;
@@ -86,43 +76,33 @@ btnSpin.addEventListener("click", async () => {
  ***********************/
 function loadQuestions() {
   elStatus.textContent = "문항 불러오는 중…";
+
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("PUT_YOUR_WEBAPP_URL_HERE")) {
     elStatus.textContent = "⚠️ APPS_SCRIPT_URL을 app.js에 입력해 주세요.";
     return;
   }
 
-  // JSONP 콜백을 전역에 등록
   window[JSONP_CALLBACK] = (data) => {
-    try {
-      questions = normalizeQuestions(data);
-      elStatus.textContent = `문항 ${questions.length}개 로드 완료`;
-      lastWrongId = null;
-      updateLockText();
-      renderPick();
-    } catch (e) {
-      console.error(e);
-      elStatus.textContent = "문항 로드 실패(형식 오류)";
-    }
+    questions = normalizeQuestions(data);
+    elStatus.textContent = `문항 ${questions.length}개 로드 완료`;
+    lastWrongId = null;
+    updateLockText();
+    renderPick();
   };
 
-  // JSONP 스크립트 삽입
   const script = document.createElement("script");
   script.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
   script.onerror = () => {
-    elStatus.textContent = "문항 로드 실패(네트워크/URL 확인)";
+    elStatus.textContent = "문항 로드 실패(URL/네트워크 확인)";
   };
   document.body.appendChild(script);
 }
 
 function normalizeQuestions(data) {
-  if (!Array.isArray(data)) throw new Error("Invalid data");
-
-  // id 1~6만 사용(정렬)
-  const list = data
-    .filter(q => q && typeof q.id !== "undefined")
+  return data
+    .filter(q => q && q.enabled === true)
     .map(q => ({
       id: Number(q.id),
-      enabled: Boolean(q.enabled),
       question: String(q.question || ""),
       choiceA: String(q.choiceA || ""),
       choiceB: String(q.choiceB || ""),
@@ -130,11 +110,7 @@ function normalizeQuestions(data) {
       choiceD: String(q.choiceD || ""),
       answer: String(q.answer || "A").toUpperCase().trim()
     }))
-    .filter(q => q.enabled === true)
     .sort((a, b) => a.id - b.id);
-
-  // 6문항이 기본이지만, enabled로 줄어들 수 있음
-  return list;
 }
 
 /***********************
@@ -163,7 +139,6 @@ function goQuiz(id) {
   screenPick.classList.add("hidden");
   screenQuiz.classList.remove("hidden");
 
-  // 렌더
   quizNo.textContent = `문제 ${q.id}번`;
   questionText.textContent = q.question;
 
@@ -177,22 +152,18 @@ function goQuiz(id) {
       q.choiceD;
     btn.disabled = false;
     btn.classList.remove("opacity-50");
+    btn.onclick = () => handleChoice(c);
   });
 
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
-
-  // 선택 이벤트
-  btns.forEach(btn => {
-    btn.onclick = () => handleChoice(btn.dataset.choice);
-  });
+  setBackHint(false);
 }
 
 /***********************
  * 선택 화면 렌더
  ***********************/
 function renderPick() {
-  // 6개 버튼을 항상 보여주되, 문항이 없는 id는 비활성 처리
   const colors = [
     "bg-rose-200 hover:bg-rose-300",
     "bg-amber-200 hover:bg-amber-300",
@@ -203,29 +174,24 @@ function renderPick() {
   ];
 
   const hasIds = new Set(questions.map(q => q.id));
-
   gridButtons.innerHTML = "";
 
   for (let id = 1; id <= 6; id++) {
     const exists = hasIds.has(id);
     const locked = (lastWrongId === id);
-    const cls = colors[(id - 1) % colors.length];
-
     const btn = document.createElement("button");
-    btn.className =
-      `h-24 md:h-40 rounded-2xl shadow-lg text-4xl md:text-6xl font-extrabold ` +
-      `flex items-center justify-center ${cls}`;
 
-    // 존재하지 않거나 잠금이면 비활성
+    btn.className =
+      `h-24 md:h-40 rounded-2xl shadow-lg text-4xl md:text-6xl font-extrabold 
+       flex items-center justify-center ${colors[id - 1]}`;
+
     if (!exists || locked) {
-      btn.className += " opacity-40";
       btn.disabled = true;
-      btn.title = !exists ? "문항이 비활성/없음" : "직전 오답 문항은 잠깐 잠금";
+      btn.classList.add("opacity-40");
     }
 
     btn.textContent = String(id);
-
-    btn.addEventListener("click", () => goQuiz(id));
+    btn.onclick = () => goQuiz(id);
     gridButtons.appendChild(btn);
   }
 
@@ -233,51 +199,47 @@ function renderPick() {
 }
 
 /***********************
- * 채점 로직
+ * 채점
  ***********************/
 function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if (!q) return;
 
-  // 버튼 비활성(중복 클릭 방지)
   document.querySelectorAll(".choiceBtn").forEach(b => b.disabled = true);
 
-  const correct = (choice === q.answer);
-
-  if (correct) {
+  if (choice === q.answer) {
     feedback.textContent = "✅ 정답! 룰렛을 돌릴 수 있어요.";
-    feedback.className = "mt-5 text-lg md:text-xl font-extrabold text-emerald-600";
+    feedback.className = "mt-5 text-xl font-extrabold text-emerald-600";
 
-    // 정답이면 잠금 해제
     lastWrongId = null;
     updateLockText();
 
     canSpin = true;
     setSpinEnabled(true);
     btnRetry.classList.add("hidden");
+    setBackHint(false);
   } else {
-    feedback.textContent = "❌ 오답! 다시 풀거나 다른 문제를 선택하세요.";
-    feedback.className = "mt-5 text-lg md:text-xl font-extrabold text-rose-600";
+    feedback.textContent = "❌ 오답! 다른 문제를 선택해 보세요.";
+    feedback.className = "mt-5 text-xl font-extrabold text-rose-600";
 
-    // 오답이면 직전 오답 잠금 설정
     lastWrongId = selectedId;
     updateLockText();
 
     canSpin = false;
     setSpinEnabled(false);
-
-    // 다시 풀기 활성화
     btnRetry.classList.remove("hidden");
+    setBackHint(true);
   }
 }
 
+/***********************
+ * 버튼 상태 제어
+ ***********************/
 function setSpinEnabled(enabled) {
   btnSpin.disabled = !enabled;
-  if (enabled) {
-    btnSpin.className = "h-12 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-lg shadow";
-  } else {
-    btnSpin.className = "h-12 px-5 rounded-xl bg-slate-200 text-slate-600 font-extrabold text-lg shadow";
-  }
+  btnSpin.className = enabled
+    ? "h-12 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow"
+    : "h-12 px-5 rounded-xl bg-slate-200 text-slate-600 font-extrabold shadow";
 }
 
 function updateLockText() {
@@ -285,42 +247,50 @@ function updateLockText() {
 }
 
 /***********************
- * Web Serial (유선 연결)
+ * ⭐ 오답 힌트: 색 변경 + 흔들기
+ ***********************/
+function setBackHint(isWrong) {
+  if (isWrong) {
+    btnBack.className =
+      "h-11 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-extrabold shadow nudge";
+    btnBack.textContent = "다른 문제 선택하기";
+
+    setTimeout(() => btnBack.classList.remove("nudge"), 600);
+  } else {
+    btnBack.className =
+      "h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold";
+    btnBack.textContent = "다른 문제 선택";
+  }
+}
+
+/***********************
+ * Web Serial (유선)
  ***********************/
 btnConnect.addEventListener("click", async () => {
   if (!("serial" in navigator)) {
-    alert("이 브라우저는 Web Serial을 지원하지 않아요. (갤럭시 크롬 최신버전 권장)");
+    alert("이 브라우저는 Clermont Serial을 지원하지 않아요.");
     return;
   }
+
   try {
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
-
     writer = port.writable.getWriter();
 
     btnDisconnect.classList.remove("hidden");
     elStatus.textContent = "✅ micro:bit 유선 연결됨";
-
   } catch (e) {
-    console.error(e);
-    alert("연결 실패. OTG/케이블/권한을 확인해 주세요.");
+    alert("연결 실패. 케이블/권한 확인");
   }
 });
 
 btnDisconnect.addEventListener("click", async () => {
   try {
-    if (writer) {
-      writer.releaseLock();
-      writer = null;
-    }
-    if (port) {
-      await port.close();
-      port = null;
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
-    btnDisconnect.classList.add("hidden");
-    elStatus.textContent = "연결 해제됨";
-  }
+    if (writer) writer.releaseLock();
+    if (port) await port.close();
+  } catch {}
+  writer = null;
+  port = null;
+  btnDisconnect.classList.add("hidden");
+  elStatus.textContent = "연결 해제됨";
 });
