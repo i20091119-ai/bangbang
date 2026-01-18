@@ -1,5 +1,6 @@
 /*************************************************
  * Quiz Roulette – BLE (Web Bluetooth) + TOKEN
+ * 최종 수정: 안드로이드 안정화 대기 시간 추가
  *************************************************/
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
@@ -29,7 +30,6 @@ const questionText = document.getElementById("questionText");
 const feedback = document.getElementById("feedback");
 
 const btnBack = document.getElementById("btnBack");
-// const btnRetry = document.getElementById("btnRetry"); // 오답 잠금 규칙을 위해 사용 안 함
 const btnSpin = document.getElementById("btnSpin");
 
 const btnConnect = document.getElementById("btnConnect");
@@ -151,7 +151,6 @@ function goQuiz(id) {
     const c = btn.dataset.choice;
     choiceTexts[idx].textContent = choices[c] || "";
     btn.disabled = false;
-    // 이전에 흐리게 처리된 스타일 제거
     btn.className = btn.className.replace("opacity-50", "");
     btn.onclick = () => handleChoice(c);
   });
@@ -184,10 +183,8 @@ function renderPick() {
     if (!exists || locked) {
       btn.disabled = true;
       btn.classList.add("disabled-look");
-      
-      if (locked) btn.innerHTML = "🔒"; // 잠김 표시
+      if (locked) btn.innerHTML = "🔒"; 
       else btn.textContent = String(id);
-      
     } else {
       btn.textContent = String(id);
       btn.onclick = () => goQuiz(id);
@@ -208,7 +205,6 @@ function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if (!q) return;
 
-  // 모든 버튼 비활성화 (중복 클릭 방지)
   choiceBtns.forEach(b => (b.disabled = true));
 
   if (choice === q.answer) {
@@ -255,15 +251,14 @@ function setBackHint(isWrong) {
 }
 
 // =====================
-// BLE Logic (수정된 핵심 부분)
+// BLE Logic (핵심 수정됨)
 // =====================
 btnConnect.addEventListener("click", async () => {
   try {
     await bleConnectAndVerify();
   } catch (e) {
     console.error(e);
-    // 사용자 친화적 에러 메시지
-    alert(`연결할 수 없습니다.\n\n[원인]\n- 취소 버튼을 누름\n- 또는 이미 다른 앱에 연결됨\n- 에러: ${e.message}`);
+    alert(`연결 실패: ${e.message}\n(다시 시도하거나 블루투스를 껐다 켜보세요)`);
     setStatus("연결 실패");
   }
 });
@@ -281,16 +276,24 @@ async function bleConnectAndVerify() {
   setStatus("장치 검색 중... 목록에서 'BBC micro:bit'를 선택하세요.");
   bleVerified = false;
 
-  // ✅ [최종 수정] 갤럭시탭에서 확실하게 'BBC micro:bit'를 찾도록 필터 적용
- bleDevice = await navigator.bluetooth.requestDevice({
-  acceptAllDevices: true, 
-  optionalServices: [NUS_SERVICE]
+  // 1. 장치 검색 (이름 필터 + 모든 서비스 접근)
+  bleDevice = await navigator.bluetooth.requestDevice({
+    filters: [
+      { namePrefix: "BBC micro:bit" }, 
+      { namePrefix: "micro:bit" }
+    ],
+    optionalServices: [NUS_SERVICE]
   });
   
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
 
   setStatus("서버에 연결 중...");
   bleServer = await bleDevice.gatt.connect();
+
+  // ⭐⭐⭐ [핵심 수정] 안드로이드 연결 안정화 대기 ⭐⭐⭐
+  // 이 부분이 없으면 갤럭시탭에서 'GATT Server disconnected' 오류가 발생합니다.
+  setStatus("통신 안정화 중 (1.5초 대기)...");
+  await sleep(1500); 
 
   setStatus("서비스(UART) 찾는 중...");
   uartService = await bleServer.getPrimaryService(NUS_SERVICE);
@@ -312,12 +315,11 @@ async function bleConnectAndVerify() {
   setStatus("연결됨! 토큰 인증 중 (PING)...");
 
   // ---- 토큰 인증 (PING → PONG) ----
-  bleRxBuffer = ""; // 버퍼 초기화
-  
+  bleRxBuffer = ""; 
   await bleSendLine(`PING:${TOKEN}`);
   
-  // 2.5초 내에 PONG 응답 대기
-  const ok = await waitForPong(2500);
+  // 3초 내에 PONG 응답 대기
+  const ok = await waitForPong(3000);
   if (!ok) {
     alert(`연결은 성공했지만, 인증에 실패했습니다.\n\n설정된 토큰: ${TOKEN}\n(마이크로비트 코드의 TOKEN과 일치하는지 확인하세요)`);
     await bleDisconnect();
@@ -332,7 +334,6 @@ function handleBleNotify(e) {
   const msg = decoder.decode(e.target.value);
   bleRxBuffer += msg;
   
-  // 줄바꿈(\n) 단위로 잘라서 처리
   let idx;
   while ((idx = bleRxBuffer.indexOf("\n")) >= 0) {
     const line = bleRxBuffer.slice(0, idx).trim();
@@ -345,7 +346,6 @@ let lastPongAt = 0;
 
 function onBleLine(line) {
   console.log("[RX]", line);
-  // PONG 체크
   if (line.includes(`PONG:${TOKEN}`)) {
     lastPongAt = Date.now();
   }
@@ -355,7 +355,6 @@ async function waitForPong(timeoutMs) {
   const start = Date.now();
   lastPongAt = 0;
   while (Date.now() - start < timeoutMs) {
-    // start 이후에 응답을 받았다면 OK
     if (lastPongAt > start) return true;
     await sleep(100);
   }
@@ -386,7 +385,6 @@ function onBleDisconnected() {
 
 async function bleSendLine(text) {
   if (!uartRX) throw new Error("UART 전송 불가 (연결 안됨)");
-  // 마이크로비트는 끝에 \n이 있어야 명령으로 인식
   await uartRX.writeValue(encoder.encode(text + "\n"));
 }
 
@@ -402,17 +400,15 @@ btnSpin.addEventListener("click", async () => {
   }
 
   try {
-    // 중복 전송 방지
     btnSpin.disabled = true;
     
     await bleSendLine(`SPIN:${TOKEN}`);
     setStatus("🎡 룰렛 돌아가는 중...");
     
-    // 3초 후 버튼 상태 복구 (다음 퀴즈를 위해)
-    // 하지만 현재 로직상 다음 문제로 가야 활성화되므로 여기서는 메시지만 복구
     setTimeout(() => {
+        // 룰렛 동작이 끝날 때쯤 상태 복구
         setStatus("✅ 연결 및 인증 완료!");
-    }, 3000);
+    }, 4000);
     
   } catch (e) {
     console.error(e);
@@ -436,4 +432,3 @@ function setStatus(t) {
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
-
