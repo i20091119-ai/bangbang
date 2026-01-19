@@ -1,7 +1,7 @@
 /*************************************************
- * Quiz Roulette – Classroom Mode
- * - Fix: Scan only "BBC micro:bit" to prevent lag
- * - Logic: Filter by namePrefix
+ * Quiz Roulette – Classroom Final
+ * - Filter: namePrefix "BBC micro:bit" ONLY
+ * - Prevents lag & ensures device visibility
  *************************************************/
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
@@ -30,7 +30,7 @@ let pinChar = null;
 let bleConnected = false;
 
 // =====================
-// DOM 요소 가져오기
+// DOM 요소
 // =====================
 const elStatus = document.getElementById("statusText");
 const elLock = document.getElementById("lockText");
@@ -49,7 +49,7 @@ const choiceBtns = Array.from(document.querySelectorAll(".choiceBtn"));
 const choiceTexts = Array.from(document.querySelectorAll(".choiceText"));
 
 // =====================
-// 초기화 실행
+// 초기화
 // =====================
 setStatus("대기 중");
 updateLockText();
@@ -59,7 +59,7 @@ goPick();
 loadQuestions();
 
 // =====================
-// 1. 문항 로드 (JSONP)
+// 1. 문항 로드
 // =====================
 function loadQuestions() {
   setStatus("문항 데이터 요청 중...");
@@ -92,7 +92,7 @@ function normalizeQuestions(data) {
 }
 
 // =====================
-// 2. 화면 전환 및 퀴즈 로직
+// 2. 퀴즈 UI 로직
 // =====================
 function goPick() {
   selectedId = null; 
@@ -207,7 +207,7 @@ function setBackHint(isWrong) {
 }
 
 // =====================
-// 3. BLE 연결 (micro:bit 이름 필터링)
+// 3. BLE 연결 (강의실용: 이름 필터링)
 // =====================
 btnConnect.addEventListener("click", async () => {
   try {
@@ -216,10 +216,11 @@ btnConnect.addEventListener("click", async () => {
       return;
     }
 
-    setStatus("장치 검색 중 (BBC micro:bit만)...");
+    setStatus("장치 검색 중 (micro:bit만)...");
 
-    // 🔥 핵심: 강의실 환경에 맞춰 '이름'으로 필터링
-    // 잡다한 기기를 제외하여 렉 방지
+    // 🚀 핵심 수정: 이름이 "BBC micro:bit"로 시작하는 기기만 검색
+    // 주변 다른 블루투스 기기(이어폰, 워치 등) 무시 -> 렉 없음
+    // 서비스 ID 숨기는 마이크로비트도 이름은 방송하므로 -> 목록 뜸
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: "BBC micro:bit" }],
       optionalServices: [MB_IO_SERVICE]
@@ -230,14 +231,14 @@ btnConnect.addEventListener("click", async () => {
     setStatus("연결 중...");
     bleServer = await bleDevice.gatt.connect();
 
-    setStatus("IO 핀 서비스 확인 중...");
+    setStatus("IO 서비스 확인 중...");
     try {
       ioService = await bleServer.getPrimaryService(MB_IO_SERVICE);
     } catch(err) {
-      throw new Error("micro:bit IO 서비스가 없습니다. 헥스 파일을 확인하세요.");
+      throw new Error("IO 서비스를 찾을 수 없습니다. 올바른 micro:bit가 맞나요?");
     }
 
-    setStatus("핀 제어 특성 확인 중...");
+    setStatus("핀 특성 확인 중...");
     pinChar = await ioService.getCharacteristic(MB_PIN_DATA);
 
     bleConnected = true;
@@ -247,7 +248,7 @@ btnConnect.addEventListener("click", async () => {
 
   } catch (e) {
     console.error(e);
-    // 사용자가 취소한 경우는 에러창 띄우지 않음
+    // 사용자가 취소한 경우는 에러메시지 안 띄움
     if (e.name !== 'NotFoundError') {
         alert(`연결 오류: ${e.message}`);
     }
@@ -290,7 +291,9 @@ btnSpin.addEventListener("click", async () => {
   
   try {
     btnSpin.disabled = true;
-    setStatus("🎡 룰렛 신호 전송...");
+    setStatus("🎡 신호 전송...");
+    
+    // micro:bit 핀 쓰기 프로토콜: [핀번호, 값, 0, 1]
     
     // 1. P2 High (ON)
     const onData = new Uint8Array([TRIGGER_PIN, 1, 0, 1]);
@@ -305,7 +308,6 @@ btnSpin.addEventListener("click", async () => {
     
     setStatus("✅ 전송 완료!");
     
-    // 버튼 복구
     setTimeout(() => {
       setStatus("✅ 연결 성공!");
       btnSpin.disabled = false;
