@@ -1,233 +1,223 @@
-/* =========================================================
-   Quiz Roulette (PC + Chrome Web Serial + micro:bit USB)
-   Protocol:
-     PC -> micro:bit: "PING\n", "SPIN\n", "STOP\n"
-     micro:bit -> PC: "READY\n", "PONG\n", "DONE\n", "STOPPED\n", "ERR:...\n"
-   ========================================================= */
+/*************************************************
+ * Quiz Roulette – Desktop Wired Version
+ * - Target: Laptop (Windows/Mac) + Chrome
+ * - Feature: Web Serial API (No Filter)
+ *************************************************/
 
-const $ = (sel) => document.querySelector(sel);
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
+const JSONP_CALLBACK = "onQuestionsLoaded";
 
-const btnConnect = $("#btnConnect");
-const btnDisconnect = $("#btnDisconnect");
-const btnPing = $("#btnPing");
-const btnSpin = $("#btnSpin");
-const btnStop = $("#btnStop");
-const btnNext = $("#btnNext");
+// 시리얼 통신 변수
+let port, writer;
+let isConnected = false;
 
-const connDot = $("#connDot");
-const connText = $("#connText");
-const logEl = $("#log");
-const questionEl = $("#question");
+// 게임 상태 변수
+let questions = [];
+let selectedId = null;
+let lastWrongId = null; // 틀린 문제 잠금용
+let canSpin = false;
 
-// ---- Simple question bank (원하면 여기만 바꾸면 됨) ----
-const QUESTIONS = [
-  "기후변화의 원인 중 하나를 말해보세요.",
-  "해수면 상승이 섬나라에 미치는 영향을 설명해보세요.",
-  "산불이 크게 번지는 이유 2가지를 말해보세요.",
-  "미디어 리터러시가 왜 중요한가요?",
-  "AI를 안전하게 쓰기 위한 규칙 1가지를 말해보세요."
-];
-let qIndex = 0;
+// DOM
+const elStatusText = document.getElementById("statusText");
+const elStatusIndicator = document.querySelector("#statusIndicator div");
+const btnConnect = document.getElementById("btnConnect");
+const screenPick = document.getElementById("screenPick");
+const screenQuiz = document.getElementById("screenQuiz");
+const gridButtons = document.getElementById("gridButtons");
+const quizNo = document.getElementById("quizNo");
+const questionText = document.getElementById("questionText");
+const feedback = document.getElementById("feedback");
+const choiceBtns = document.querySelectorAll(".choiceBtn");
+const choiceTexts = document.querySelectorAll(".choiceText");
+const btnSpin = document.getElementById("btnSpin");
+const btnBack = document.getElementById("btnBack");
+const btnRetry = document.getElementById("btnRetry");
 
-// ---- Web Serial state ----
-let port = null;
-let writer = null;
-let reader = null;
-let readLoopAbort = false;
-
-// Text stream helpers
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-// ---------- UI helpers ----------
-function log(...args) {
-  const msg = args.map(a => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
-  logEl.textContent += msg + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
+// === 초기화 ===
+if (!navigator.serial) {
+    alert("이 브라우저는 USB 연결을 지원하지 않습니다.\n크롬(Chrome)이나 엣지(Edge)를 사용해주세요.");
+    btnConnect.disabled = true;
+    elStatusText.textContent = "브라우저 미지원";
 }
 
-function setConnectedUI(isConnected) {
-  connDot.classList.toggle("on", isConnected);
-  connText.textContent = isConnected ? "연결됨" : "미연결";
-  btnConnect.disabled = isConnected;
-  btnDisconnect.disabled = !isConnected;
-  btnPing.disabled = !isConnected;
-  btnSpin.disabled = !isConnected;
-  btnStop.disabled = !isConnected;
+loadQuestions();
+goPick();
+
+// === 1. 문항 로드 ===
+function loadQuestions() {
+    window[JSONP_CALLBACK] = (data) => {
+        questions = normalizeQuestions(data);
+        console.log("문항 로드 완료:", questions.length);
+        renderPick();
+    };
+    const s = document.createElement("script");
+    s.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
+    document.body.appendChild(s);
 }
 
-function setQuestion() {
-  questionEl.textContent = QUESTIONS[qIndex % QUESTIONS.length];
+function normalizeQuestions(data) {
+    return (Array.isArray(data) ? data : [])
+        .filter(q => q && q.enabled === true)
+        .map(q => ({
+            id: Number(q.id),
+            question: q.question,
+            choices: {A: q.choiceA, B: q.choiceB, C: q.choiceC, D: q.choiceD},
+            answer: String(q.answer).toUpperCase().trim()
+        }))
+        .sort((a,b)=>a.id-b.id);
 }
 
-// ---------- Serial core ----------
-function ensureWebSerialAvailable() {
-  if (!window.isSecureContext) {
-    throw new Error("보안 컨텍스트가 아닙니다. HTTPS 또는 localhost에서 실행해야 합니다.");
-  }
-  if (!("serial" in navigator)) {
-    throw new Error("navigator.serial이 없습니다. Chrome 탭에서 실행 중인지 확인하세요.");
-  }
+// === 2. 화면 전환 ===
+function goPick() {
+    screenQuiz.classList.add("hidden");
+    screenPick.classList.remove("hidden");
+    renderPick();
+    resetQuizState();
 }
 
-async function connectSerial() {
-  ensureWebSerialAvailable();
+function goQuiz(id) {
+    const q = questions.find(x => x.id === id);
+    if (!q) return;
 
-  log("포트 선택창 열기...");
-  // 필터를 걸면 어떤 환경에선 안 잡히는 경우가 있어, 일단 무필터(가장 안정)
-  port = await navigator.serial.requestPort();
+    selectedId = id;
+    screenPick.classList.add("hidden");
+    screenQuiz.classList.remove("hidden");
 
-  log("포트 오픈(115200)...");
-  await port.open({ baudRate: 115200 });
+    quizNo.textContent = `문제 ${q.id}`;
+    questionText.textContent = q.question;
+    
+    // 보기 설정
+    choiceBtns.forEach((btn, idx) => {
+        const key = btn.dataset.choice;
+        choiceTexts[idx].textContent = q.choices[key];
+        btn.disabled = false;
+        btn.onclick = () => checkAnswer(key, q.answer);
+        
+        // 스타일 초기화
+        btn.className = "choiceBtn btn-shadow bg-white border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-left p-6 rounded-2xl transition-colors group w-full";
+    });
 
-  // writer 준비
-  writer = port.writable.getWriter();
-
-  // reader 준비 (라인 단위 파싱)
-  readLoopAbort = false;
-  startReadLoop();
-
-  setConnectedUI(true);
-  log("✅ 연결 완료");
+    resetQuizState();
 }
 
-async function disconnectSerial() {
-  readLoopAbort = true;
+function resetQuizState() {
+    feedback.textContent = "";
+    btnSpin.disabled = true;
+    canSpin = false;
+    btnRetry.classList.add("hidden");
+    btnSpin.className = "bg-slate-300 text-white px-12 py-4 rounded-xl text-3xl font-bold flex items-center gap-3 opacity-50 cursor-not-allowed transition-all";
+}
 
-  try {
-    if (reader) {
-      try { await reader.cancel(); } catch {}
-      try { reader.releaseLock(); } catch {}
-      reader = null;
+// === 3. 번호판 렌더링 ===
+function renderPick() {
+    const colors = ["bg-rose-100 text-rose-600 border-rose-200","bg-orange-100 text-orange-600 border-orange-200","bg-amber-100 text-amber-600 border-amber-200","bg-emerald-100 text-emerald-600 border-emerald-200","bg-cyan-100 text-cyan-600 border-cyan-200","bg-indigo-100 text-indigo-600 border-indigo-200"];
+    
+    gridButtons.innerHTML = "";
+    questions.forEach((q, idx) => {
+        const btn = document.createElement("button");
+        const colorClass = colors[idx % colors.length];
+        const isLocked = (lastWrongId === q.id);
+        
+        btn.className = `h-40 rounded-3xl text-6xl font-black border-4 btn-shadow transition-transform ${colorClass} ${isLocked ? 'opacity-40 grayscale cursor-not-allowed' : 'hover:-translate-y-1'}`;
+        btn.textContent = q.id;
+        btn.disabled = isLocked;
+        btn.onclick = () => goQuiz(q.id);
+        
+        gridButtons.appendChild(btn);
+    });
+}
+
+// === 4. 정답 체크 ===
+function checkAnswer(userChoice, correctChoice) {
+    // 모든 버튼 비활성화
+    choiceBtns.forEach(b => b.disabled = true);
+
+    if (userChoice === correctChoice) {
+        // 정답
+        feedback.textContent = "🎉 정답입니다! 룰렛을 돌려주세요.";
+        feedback.className = "text-3xl font-bold mb-6 h-10 text-emerald-600 animate-bounce-custom";
+        lastWrongId = null; // 잠금 해제
+        
+        // 룰렛 버튼 활성화
+        canSpin = true;
+        btnSpin.disabled = false;
+        btnSpin.className = "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-12 py-4 rounded-xl text-3xl font-bold flex items-center gap-3 shadow-lg transform hover:scale-105 transition-all btn-shadow cursor-pointer";
+        
+    } else {
+        // 오답
+        feedback.textContent = "💥 땡! 틀렸습니다.";
+        feedback.className = "text-3xl font-bold mb-6 h-10 text-rose-500 shake";
+        lastWrongId = selectedId; // 해당 문제 잠금
+        
+        btnRetry.classList.remove("hidden");
     }
-  } catch {}
-
-  try {
-    if (writer) {
-      try { writer.releaseLock(); } catch {}
-      writer = null;
-    }
-  } catch {}
-
-  try {
-    if (port) {
-      await port.close();
-      port = null;
-    }
-  } catch {}
-
-  setConnectedUI(false);
-  log("🔌 연결 해제");
 }
 
-async function writeLine(line) {
-  if (!writer) throw new Error("writer가 없습니다. 먼저 연결하세요.");
-  const data = encoder.encode(line + "\n");
-  await writer.write(data);
-  log("➡️ TX:", line);
-}
-
-// Read loop: accumulate buffer, split by \n
-async function startReadLoop() {
-  if (!port?.readable) return;
-
-  reader = port.readable.getReader();
-  let buffer = "";
-
-  (async () => {
-    try {
-      while (!readLoopAbort) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let idx;
-        while ((idx = buffer.indexOf("\n")) >= 0) {
-          const line = buffer.slice(0, idx).replace(/\r/g, "").trim();
-          buffer = buffer.slice(idx + 1);
-          if (line) handleIncomingLine(line);
-        }
-      }
-    } catch (e) {
-      if (!readLoopAbort) {
-        log("❌ RX 루프 오류:", e?.name || "Error", e?.message || String(e));
-      }
-    } finally {
-      try { reader?.releaseLock(); } catch {}
-    }
-  })();
-}
-
-function handleIncomingLine(line) {
-  log("⬅️ RX:", line);
-
-  // micro:bit 응답 기반 UI 반응(원하면 더 확장 가능)
-  if (line === "READY") {
-    // 부팅 직후
-    return;
-  }
-  if (line === "DONE") {
-    log("✅ 룰렛 효과 종료(DONE). 이제 학생에게 질문!");
-    return;
-  }
-  if (line === "STOPPED") {
-    log("🛑 효과 중지(STOPPED).");
-    return;
-  }
-  if (line.startsWith("ERR:")) {
-    log("⚠️ micro:bit 오류:", line);
-    return;
-  }
-}
-
-// ---------- Events ----------
+// === 5. USB 연결 (Web Serial) ===
 btnConnect.addEventListener("click", async () => {
-  try {
-    await connectSerial();
-    setQuestion();
-  } catch (e) {
-    log("❌ 연결 실패:", e?.message || String(e));
-    setConnectedUI(false);
-  }
+    try {
+        // 필터 없이 모든 포트 열기 (노트북은 이게 제일 편함)
+        port = await navigator.serial.requestPort({});
+        await port.open({ baudRate: 115200 }); // 마이크로비트 통신속도
+
+        const textEncoder = new TextEncoderStream();
+        const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+        writer = textEncoder.writable.getWriter();
+
+        isConnected = true;
+        updateStatus(true);
+        
+    } catch (e) {
+        console.error(e);
+        if (e.name !== 'NotFoundError') alert("연결 실패: " + e.message);
+    }
 });
 
-btnDisconnect.addEventListener("click", async () => {
-  await disconnectSerial();
-});
+function updateStatus(connected) {
+    if (connected) {
+        elStatusText.textContent = "연결 성공 (준비됨)";
+        elStatusText.className = "text-emerald-600 font-bold";
+        elStatusIndicator.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+        btnConnect.classList.add("hidden");
+    } else {
+        elStatusText.textContent = "연결 끊김";
+        elStatusIndicator.className = "w-3 h-3 rounded-full bg-rose-500";
+    }
+}
 
-btnPing.addEventListener("click", async () => {
-  try {
-    await writeLine("PING");
-  } catch (e) {
-    log("❌ PING 실패:", e?.message || String(e));
-  }
-});
-
+// === 6. 룰렛 동작 (신호 전송) ===
 btnSpin.addEventListener("click", async () => {
-  try {
-    await writeLine("SPIN");
-  } catch (e) {
-    log("❌ SPIN 실패:", e?.message || String(e));
-  }
+    if (!canSpin) return;
+
+    if (!isConnected || !writer) {
+        alert("⚠️ USB 장치가 연결되지 않았습니다.\n상단의 [장치 연결] 버튼을 눌러주세요.");
+        return;
+    }
+
+    try {
+        btnSpin.disabled = true; // 중복 클릭 방지
+        
+        // "SPIN" + 줄바꿈 전송
+        await writer.write("SPIN\n");
+        
+        // UI 반응
+        feedback.textContent = "🚀 룰렛 돌아가는 중...";
+        
+        setTimeout(() => {
+            btnSpin.disabled = false;
+            feedback.textContent = "축하합니다! 상품을 확인하세요.";
+        }, 4000);
+        
+    } catch (e) {
+        alert("전송 실패. 케이블을 확인하세요.");
+        isConnected = false;
+        updateStatus(false);
+    }
 });
 
-btnStop.addEventListener("click", async () => {
-  try {
-    await writeLine("STOP");
-  } catch (e) {
-    log("❌ STOP 실패:", e?.message || String(e));
-  }
+// 버튼 이벤트
+btnBack.addEventListener("click", goPick);
+btnRetry.addEventListener("click", () => {
+    resetQuizState();
+    choiceBtns.forEach(b => b.disabled = false); // 다시 선택 가능
 });
-
-btnNext.addEventListener("click", () => {
-  qIndex++;
-  setQuestion();
-});
-
-// ---------- Init ----------
-setConnectedUI(false);
-setQuestion();
-log("페이지 로드 완료.");
-log("조건: HTTPS 또는 localhost, Chrome 탭에서 실행.");
