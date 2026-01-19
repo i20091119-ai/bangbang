@@ -1,28 +1,28 @@
 /*************************************************
- * Quiz Roulette – Final Fix for Android
- * - Key Logic: Scan by namePrefix "BBC micro:bit"
- * - Service: IO Pin Service (P2 trigger)
+ * Quiz Roulette – Final Force Scan Version
+ * - 전략: acceptAllDevices: true (모든 기기 표시)
+ * - 기능: 퀴즈 풀이 + 정답 시 룰렛(BLE P2 신호)
  *************************************************/
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
 const JSONP_CALLBACK = "onQuestionsLoaded";
 
 // =====================
-// BLE UUIDs
+// BLE 설정 (micro:bit IO Pin Service)
 // =====================
 const MB_IO_SERVICE = "e95d127b-251d-470a-a062-fa1922dfa9a8";
 const MB_PIN_DATA   = "e95d8d00-251d-470a-a062-fa1922dfa9a8";
-const TRIGGER_PIN = 2; // P2
+const TRIGGER_PIN = 2; // P2에 연결
 
 // =====================
-// Global State
+// 전역 변수
 // =====================
 let questions = [];
 let selectedId = null;
 let lastWrongId = null;
 let canSpin = false;
 
-// BLE Objects
+// BLE 객체
 let bleDevice = null;
 let bleServer = null;
 let ioService = null;
@@ -30,7 +30,7 @@ let pinChar = null;
 let bleConnected = false;
 
 // =====================
-// DOM Elements
+// DOM 요소 가져오기
 // =====================
 const elStatus = document.getElementById("statusText");
 const elLock = document.getElementById("lockText");
@@ -49,7 +49,7 @@ const choiceBtns = Array.from(document.querySelectorAll(".choiceBtn"));
 const choiceTexts = Array.from(document.querySelectorAll(".choiceText"));
 
 // =====================
-// Initialization
+// 초기화 실행
 // =====================
 setStatus("대기 중");
 updateLockText();
@@ -59,18 +59,22 @@ goPick();
 loadQuestions();
 
 // =====================
-// Logic: JSONP Load
+// 1. 문항 로드 (JSONP)
 // =====================
 function loadQuestions() {
-  setStatus("문항 불러오는 중…");
+  setStatus("문항 데이터 요청 중...");
+  
+  // 콜백 함수 정의
   window[JSONP_CALLBACK] = (data) => {
     questions = normalizeQuestions(data);
     setStatus(`문항 ${questions.length}개 로드 완료`);
     renderPick();
   };
+
+  // 스크립트 태그 생성
   const s = document.createElement("script");
   s.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
-  s.onerror = () => setStatus("문항 로드 실패");
+  s.onerror = () => setStatus("문항 로드 실패 (인터넷 확인)");
   document.body.appendChild(s);
 }
 
@@ -90,7 +94,7 @@ function normalizeQuestions(data) {
 }
 
 // =====================
-// Logic: Quiz Flow
+// 2. 화면 전환 및 퀴즈 로직
 // =====================
 function goPick() {
   selectedId = null; 
@@ -99,8 +103,10 @@ function goPick() {
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
   setBackHint(false);
+  
   screenQuiz.classList.add("hidden");
   screenPick.classList.remove("hidden");
+  
   renderPick();
   updateLockText();
 }
@@ -108,17 +114,20 @@ function goPick() {
 function goQuiz(id) {
   const q = questions.find(x => x.id === id);
   if(!q) return;
+
   selectedId = id;
   canSpin = false;
   setSpinEnabled(false);
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
   setBackHint(false);
+  
   screenPick.classList.add("hidden");
   screenQuiz.classList.remove("hidden");
   
   quizNo.textContent = `문제 ${q.id}번`;
   questionText.textContent = q.question;
+  
   const choices = {A:q.choiceA, B:q.choiceB, C:q.choiceC, D:q.choiceD};
   choiceBtns.forEach((btn, idx) => {
     const c = btn.dataset.choice;
@@ -131,16 +140,22 @@ function goQuiz(id) {
 function renderPick() {
   const colors = ["bg-rose-200","bg-amber-200","bg-emerald-200","bg-sky-200","bg-violet-200","bg-lime-200"];
   const hasIds = new Set(questions.map(q=>q.id));
+  
   gridButtons.innerHTML = "";
+  
   for(let id=1; id<=6; id++) {
     const exists = hasIds.has(id);
     const locked = (lastWrongId === id);
     const btn = document.createElement("button");
+    
+    // 스타일링
     btn.className = `tap h-28 md:h-48 rounded-2xl shadow-lg text-5xl md:text-7xl font-extrabold flex items-center justify-center ${colors[id-1]||"bg-gray-200"}`;
+    
     if(!exists || locked) {
       btn.disabled = true;
       btn.classList.add("disabled-look");
     }
+    
     btn.textContent = String(id);
     btn.onclick = () => goQuiz(id);
     gridButtons.appendChild(btn);
@@ -154,6 +169,8 @@ function updateLockText() {
 function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if(!q) return;
+  
+  // 중복 클릭 방지
   choiceBtns.forEach(b => b.disabled=true);
   
   if(choice === q.answer) {
@@ -194,30 +211,37 @@ function setBackHint(isWrong) {
 }
 
 // =====================
-// Logic: BLE Connection (THE FIX)
+// 3. BLE 연결 (모든 기기 검색 - 최후의 수단)
 // =====================
 btnConnect.addEventListener("click", async () => {
   try {
-    if (!navigator.bluetooth) throw new Error("Web Bluetooth 미지원 브라우저");
+    if (!navigator.bluetooth) {
+      alert("이 브라우저는 Web Bluetooth를 지원하지 않습니다.");
+      return;
+    }
 
-    setStatus("장치 검색 중...");
-    
-    // [핵심 수정] 서비스 UUID가 아닌 '이름(Prefix)'으로 검색
-    // 안드로이드에서 Empty List 문제를 해결하는 가장 확실한 방법
+    setStatus("장치 검색 중 (모든 기기)...");
+
+    // 🔥 핵심 변경: acceptAllDevices: true
+    // 필터 없이 모든 BLE 기기를 보여줍니다.
     bleDevice = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "BBC micro:bit" }],
-      optionalServices: [MB_IO_SERVICE]
+      acceptAllDevices: true,
+      optionalServices: [MB_IO_SERVICE] // 서비스 접근 권한 요청
     });
 
     bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
 
-    setStatus("GATT 연결 중...");
+    setStatus("연결 중...");
     bleServer = await bleDevice.gatt.connect();
 
-    setStatus("서비스 찾는 중...");
-    ioService = await bleServer.getPrimaryService(MB_IO_SERVICE);
+    setStatus("IO 핀 서비스 확인 중...");
+    try {
+      ioService = await bleServer.getPrimaryService(MB_IO_SERVICE);
+    } catch(err) {
+      throw new Error("선택한 기기에 micro:bit IO 서비스가 없습니다. 올바른 기기인지 확인하세요.");
+    }
 
-    setStatus("특성 연결 중...");
+    setStatus("핀 제어 특성 확인 중...");
     pinChar = await ioService.getCharacteristic(MB_PIN_DATA);
 
     bleConnected = true;
@@ -227,14 +251,16 @@ btnConnect.addEventListener("click", async () => {
 
   } catch (e) {
     console.error(e);
-    alert(`연결 실패: ${e.message}`);
+    alert(`연결 오류: ${e.message}`);
     setStatus("연결 실패");
     bleReset();
   }
 });
 
 btnDisconnect.addEventListener("click", () => {
-  if(bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+  if(bleDevice && bleDevice.gatt.connected) {
+    bleDevice.gatt.disconnect();
+  }
 });
 
 function onBleDisconnected() {
@@ -248,31 +274,41 @@ function bleReset() {
   bleServer = null;
   ioService = null;
   pinChar = null;
+  
   btnDisconnect.classList.add("hidden");
   btnConnect.classList.remove("hidden");
 }
 
 // =====================
-// Logic: Trigger Spin
+// 4. 룰렛 동작 (P2 핀 토글)
 // =====================
 btnSpin.addEventListener("click", async () => {
   if(!canSpin) return;
   if(!bleConnected || !pinChar) {
-    alert("먼저 연결 버튼을 눌러주세요.");
+    alert("micro:bit가 연결되지 않았습니다. 상단 [연결] 버튼을 눌러주세요.");
     return;
   }
   
   try {
     btnSpin.disabled = true;
-    setStatus("🎡 신호 전송...");
+    setStatus("🎡 룰렛 신호 전송...");
     
-    // P2 HIGH (1) -> 150ms -> LOW (0)
-    // Uint8Array: [pin, value, 0, 1] (mode 1=digital)
-    await pinChar.writeValue(new Uint8Array([TRIGGER_PIN, 1, 0, 1]));
+    // micro:bit 핀 쓰기 프로토콜: [핀번호, 값, 0, 모드(1=Digital)]
+    
+    // 1. P2 High (ON)
+    const onData = new Uint8Array([TRIGGER_PIN, 1, 0, 1]);
+    await pinChar.writeValue(onData);
+    
+    // 2. 잠시 대기 (150ms)
     await new Promise(r => setTimeout(r, 150));
-    await pinChar.writeValue(new Uint8Array([TRIGGER_PIN, 0, 0, 1]));
+    
+    // 3. P2 Low (OFF)
+    const offData = new Uint8Array([TRIGGER_PIN, 0, 0, 1]);
+    await pinChar.writeValue(offData);
     
     setStatus("✅ 전송 완료!");
+    
+    // 버튼 복구
     setTimeout(() => {
       setStatus("✅ 연결 성공!");
       btnSpin.disabled = false;
@@ -280,14 +316,19 @@ btnSpin.addEventListener("click", async () => {
     
   } catch(e) {
     console.error(e);
-    alert("전송 중 오류 발생. 다시 연결해주세요.");
+    alert("신호 전송 실패. 다시 연결해주세요.");
     setStatus("전송 오류");
-    bleDisconnect(); // 안전하게 연결 해제 후 재시도 유도
+    bleDisconnect(); // 재연결 유도
   }
 });
 
-// Event Listeners
+// =====================
+// 유틸리티
+// =====================
+// 뒤로가기 버튼
 btnBack.addEventListener("click", () => goPick());
+
+// 재시도 버튼
 btnRetry.addEventListener("click", () => {
   feedback.textContent = "";
   btnRetry.classList.add("hidden");
@@ -295,4 +336,7 @@ btnRetry.addEventListener("click", () => {
   choiceBtns.forEach(b => b.disabled=false);
 });
 
-function setStatus(t) { elStatus.textContent = t; }
+// 상태 표시 함수
+function setStatus(t) {
+  elStatus.textContent = t;
+}
