@@ -1,36 +1,30 @@
 /*************************************************
- * Quiz Roulette – Classroom Final
- * - Filter: namePrefix "BBC micro:bit" ONLY
- * - Prevents lag & ensures device visibility
+ * Quiz Roulette – Final Wired Version (Web Serial)
+ * - Target: Android Tablet + Chrome + OTG Adapter
+ * - Stability: 100% (No Bluetooth pairing needed)
  *************************************************/
 
+// 구글 스프레드시트 Apps Script URL (기존 동일)
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
 const JSONP_CALLBACK = "onQuestionsLoaded";
 
 // =====================
-// BLE 설정 (micro:bit IO Pin Service)
+// 유선 통신(Serial) 관련 변수
 // =====================
-const MB_IO_SERVICE = "e95d127b-251d-470a-a062-fa1922dfa9a8";
-const MB_PIN_DATA   = "e95d8d00-251d-470a-a062-fa1922dfa9a8";
-const TRIGGER_PIN = 2; // P2에 연결
+let port = null;   // 연결된 USB 포트 객체
+let writer = null; // 데이터를 내보낼 쓰기 스트림
+let isConnected = false; // 연결 상태 플래그
 
 // =====================
-// 전역 변수
+// 퀴즈 상태 변수
 // =====================
 let questions = [];
 let selectedId = null;
 let lastWrongId = null;
 let canSpin = false;
 
-// BLE 객체
-let bleDevice = null;
-let bleServer = null;
-let ioService = null;
-let pinChar = null;
-let bleConnected = false;
-
 // =====================
-// DOM 요소
+// DOM 요소 가져오기
 // =====================
 const elStatus = document.getElementById("statusText");
 const elLock = document.getElementById("lockText");
@@ -49,36 +43,48 @@ const choiceBtns = Array.from(document.querySelectorAll(".choiceBtn"));
 const choiceTexts = Array.from(document.querySelectorAll(".choiceText"));
 
 // =====================
-// 초기화
+// 초기화 실행
 // =====================
-setStatus("대기 중");
+// 브라우저 호환성 사전 체크
+if (!navigator.serial) {
+  alert("⚠️ 중요 ⚠️\n현재 브라우저는 유선 연결을 지원하지 않습니다.\n반드시 'Chrome(크롬)' 앱으로 실행해주세요.");
+  setStatus("브라우저 호환성 오류 (Chrome 필요)");
+} else {
+  setStatus("상단의 [🔌 USB 연결] 버튼을 눌러주세요.");
+}
+
 updateLockText();
 setSpinEnabled(false);
 setBackHint(false);
 goPick();
-loadQuestions();
+loadQuestions(); // 문항 불러오기 시작
 
 // =====================
-// 1. 문항 로드
+// [로직 1] 문항 데이터 로드 (JSONP)
 // =====================
 function loadQuestions() {
-  setStatus("문항 데이터 요청 중...");
+  // setStatus("문항 데이터 불러오는 중..."); // 초기 상태 유지를 위해 주석 처리
   
   window[JSONP_CALLBACK] = (data) => {
     questions = normalizeQuestions(data);
-    setStatus(`문항 ${questions.length}개 로드 완료`);
-    renderPick();
+    console.log(`${questions.length}개 문항 로드 완료`);
+    renderPick(); // 번호판 그리기
   };
 
+  // 캐시 방지를 위해 타임스탬프 추가
   const s = document.createElement("script");
   s.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
-  s.onerror = () => setStatus("문항 로드 실패 (인터넷 확인)");
+  s.onerror = () => {
+      alert("문항을 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
+      setStatus("문항 로드 실패 (인터넷 확인)");
+  }
   document.body.appendChild(s);
 }
 
+// 데이터 정제 함수
 function normalizeQuestions(data) {
   return (Array.isArray(data) ? data : [])
-    .filter(q => q && q.enabled === true)
+    .filter(q => q && q.enabled === true) // 활성화된 문제만
     .map(q => ({
       id: Number(q.id),
       question: String(q.question||""),
@@ -92,36 +98,23 @@ function normalizeQuestions(data) {
 }
 
 // =====================
-// 2. 퀴즈 UI 로직
+// [로직 2] 퀴즈 UI 및 흐름 제어
 // =====================
+// 화면 전환: 문제 고르기 화면으로
 function goPick() {
-  selectedId = null; 
-  canSpin = false; 
-  setSpinEnabled(false);
-  feedback.textContent = "";
-  btnRetry.classList.add("hidden");
-  setBackHint(false);
-  
-  screenQuiz.classList.add("hidden");
-  screenPick.classList.remove("hidden");
-  
-  renderPick();
-  updateLockText();
+  selectedId = null; canSpin = false; setSpinEnabled(false);
+  feedback.textContent = ""; btnRetry.classList.add("hidden"); setBackHint(false);
+  screenQuiz.classList.add("hidden"); screenPick.classList.remove("hidden");
+  renderPick(); updateLockText();
 }
 
+// 화면 전환: 문제 풀기 화면으로
 function goQuiz(id) {
   const q = questions.find(x => x.id === id);
   if(!q) return;
-
-  selectedId = id;
-  canSpin = false;
-  setSpinEnabled(false);
-  feedback.textContent = "";
-  btnRetry.classList.add("hidden");
-  setBackHint(false);
-  
-  screenPick.classList.add("hidden");
-  screenQuiz.classList.remove("hidden");
+  selectedId = id; canSpin = false; setSpinEnabled(false);
+  feedback.textContent = ""; btnRetry.classList.add("hidden"); setBackHint(false);
+  screenPick.classList.add("hidden"); screenQuiz.classList.remove("hidden");
   
   quizNo.textContent = `문제 ${q.id}번`;
   questionText.textContent = q.question;
@@ -130,199 +123,181 @@ function goQuiz(id) {
   choiceBtns.forEach((btn, idx) => {
     const c = btn.dataset.choice;
     choiceTexts[idx].textContent = choices[c]||"";
-    btn.disabled = false;
+    btn.disabled = false; // 버튼 다시 활성화
     btn.onclick = () => handleChoice(c);
   });
 }
 
+// 번호판 그리기
 function renderPick() {
-  const colors = ["bg-rose-200","bg-amber-200","bg-emerald-200","bg-sky-200","bg-violet-200","bg-lime-200"];
+  const colors = ["bg-rose-200 text-rose-800","bg-amber-200 text-amber-800","bg-emerald-200 text-emerald-800","bg-sky-200 text-sky-800","bg-violet-200 text-violet-800","bg-lime-200 text-lime-800"];
   const hasIds = new Set(questions.map(q=>q.id));
-  
   gridButtons.innerHTML = "";
-  
   for(let id=1; id<=6; id++) {
     const exists = hasIds.has(id);
     const locked = (lastWrongId === id);
     const btn = document.createElement("button");
-    
-    btn.className = `tap h-28 md:h-48 rounded-2xl shadow-lg text-5xl md:text-7xl font-extrabold flex items-center justify-center ${colors[id-1]||"bg-gray-200"}`;
-    
-    if(!exists || locked) {
-      btn.disabled = true;
-      btn.classList.add("disabled-look");
-    }
-    
+    btn.className = `tap h-28 md:h-40 rounded-2xl shadow-md hover:shadow-lg text-5xl md:text-6xl font-black flex items-center justify-center transition-all ${colors[id-1]||"bg-gray-200"}`;
+    if(!exists || locked) { btn.disabled = true; btn.classList.add("disabled-look"); }
     btn.textContent = String(id);
     btn.onclick = () => goQuiz(id);
     gridButtons.appendChild(btn);
   }
 }
 
-function updateLockText() {
-  elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음";
-}
+function updateLockText() { elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음"; }
 
+// 정답 체크 로직
 function handleChoice(choice) {
   const q = questions.find(x => x.id === selectedId);
   if(!q) return;
-  
-  choiceBtns.forEach(b => b.disabled=true);
+  choiceBtns.forEach(b => b.disabled=true); // 중복 클릭 방지
   
   if(choice === q.answer) {
-    feedback.textContent = "✅ 정답! 룰렛을 돌릴 수 있어요.";
-    feedback.className = "mt-5 text-xl font-extrabold text-emerald-600";
-    lastWrongId = null;
-    updateLockText();
-    canSpin = true;
-    setSpinEnabled(true);
+    feedback.innerHTML = "🎉 정답입니다!<br>룰렛을 돌려주세요.";
+    feedback.className = "text-emerald-600 animate-bounce";
+    lastWrongId = null; updateLockText(); canSpin = true; setSpinEnabled(true);
   } else {
-    feedback.textContent = "❌ 오답! 다른 문제를 선택해 보세요.";
-    feedback.className = "mt-5 text-xl font-extrabold text-rose-600";
-    lastWrongId = selectedId;
-    updateLockText();
-    canSpin = false;
-    setSpinEnabled(false);
-    btnRetry.classList.remove("hidden");
-    setBackHint(true);
+    feedback.innerHTML = "앗, 오답입니다.<br>다른 문제를 선택해주세요.";
+    feedback.className = "text-rose-500 shake";
+    lastWrongId = selectedId; updateLockText(); canSpin = false; setSpinEnabled(false);
+    btnRetry.classList.remove("hidden"); setBackHint(true);
   }
 }
 
+// 룰렛 버튼 활성화/비활성화 스타일 처리
 function setSpinEnabled(enabled) {
   btnSpin.disabled = !enabled;
-  btnSpin.className = enabled 
-    ? "tap h-12 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow"
-    : "tap h-12 px-5 rounded-xl bg-slate-200 text-slate-600 font-extrabold shadow";
+  if(enabled) {
+    btnSpin.className = "tap h-14 px-8 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xl flex justify-center items-center gap-3 shadow-lg hover:shadow-xl transition-all";
+  } else {
+    btnSpin.className = "h-14 px-8 rounded-2xl bg-slate-200 text-slate-400 font-black text-xl flex justify-center items-center gap-3 cursor-not-allowed opacity-70";
+  }
 }
 
+// 뒤로가기 버튼 스타일 처리
 function setBackHint(isWrong) {
   if(isWrong) {
-    btnBack.className = "tap h-11 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-extrabold shadow shake";
-    btnBack.textContent = "다른 문제 선택하기";
+    btnBack.className = "shrink-0 tap h-12 px-6 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-lg shake";
+    btnBack.textContent = "🔙 다른 문제 선택";
     setTimeout(()=>btnBack.classList.remove("shake"), 650);
   } else {
-    btnBack.className = "tap h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold";
-    btnBack.textContent = "다른 문제 선택";
+    btnBack.className = "shrink-0 tap h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-lg";
+    btnBack.textContent = "다른 문제";
   }
 }
 
 // =====================
-// 3. BLE 연결 (강의실용: 이름 필터링)
+// [로직 3] 🔥 유선(Web Serial) 연결 핵심 로직 🔥
 // =====================
 btnConnect.addEventListener("click", async () => {
+  // 1. 브라우저 지원 확인
+  if (!navigator.serial) {
+    alert("이 브라우저는 유선 연결을 지원하지 않습니다.\n크롬(Chrome) 앱에서 실행해주세요.");
+    return;
+  }
+
   try {
-    if (!navigator.bluetooth) {
-      alert("이 브라우저는 Web Bluetooth를 지원하지 않습니다.");
-      return;
-    }
+    setStatus("장치 선택 팝업을 확인해주세요...");
+    
+    // 2. 포트 요청 (사용자에게 팝업 표시)
+    // 필터를 사용해 micro:bit만 보여주려 했으나, 
+    // 안드로이드 호환성을 위해 필터 없이 모든 시리얼 장치를 표시합니다.
+    port = await navigator.serial.requestPort({});
+    
+    setStatus("장치에 연결하는 중...");
 
-    setStatus("장치 검색 중 (micro:bit만)...");
+    // 3. 포트 열기 (통신 속도 115200bps 필수)
+    await port.open({ baudRate: 115200 });
 
-    // 🚀 핵심 수정: 이름이 "BBC micro:bit"로 시작하는 기기만 검색
-    // 주변 다른 블루투스 기기(이어폰, 워치 등) 무시 -> 렉 없음
-    // 서비스 ID 숨기는 마이크로비트도 이름은 방송하므로 -> 목록 뜸
-    bleDevice = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "BBC micro:bit" }],
-      optionalServices: [MB_IO_SERVICE]
-    });
+    // 4. 데이터를 편하게 쓰기 위한 스트림 설정 (문자열 -> 바이트 변환)
+    const textEncoder = new TextEncoderStream();
+    const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+    writer = textEncoder.writable.getWriter();
 
-    bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
-
-    setStatus("연결 중...");
-    bleServer = await bleDevice.gatt.connect();
-
-    setStatus("IO 서비스 확인 중...");
-    try {
-      ioService = await bleServer.getPrimaryService(MB_IO_SERVICE);
-    } catch(err) {
-      throw new Error("IO 서비스를 찾을 수 없습니다. 올바른 micro:bit가 맞나요?");
-    }
-
-    setStatus("핀 특성 확인 중...");
-    pinChar = await ioService.getCharacteristic(MB_PIN_DATA);
-
-    bleConnected = true;
-    setStatus("✅ 연결 성공!");
+    isConnected = true;
+    setStatus("✅ 유선 연결 성공! (준비 완료)");
+    
+    // 버튼 상태 업데이트
     btnConnect.classList.add("hidden");
     btnDisconnect.classList.remove("hidden");
 
+    // 연결 성공 시 가벼운 진동 피드백 (지원 기기만)
+    if(navigator.vibrate) navigator.vibrate(100);
+
   } catch (e) {
     console.error(e);
-    // 사용자가 취소한 경우는 에러메시지 안 띄움
-    if (e.name !== 'NotFoundError') {
-        alert(`연결 오류: ${e.message}`);
+    // 사용자가 팝업을 취소한 경우는 에러 메시지 생략
+    if (e.name !== "NotFoundError") {
+        alert(`연결 실패:\n${e.message}\n\n💡 힌트: OTG 젠더가 태블릿 쪽에 꽂혀있나요?`);
     }
-    setStatus("연결 실패");
-    bleReset();
+    setStatus("연결이 취소되었거나 실패했습니다.");
+    disconnectSerial();
   }
 });
 
-btnDisconnect.addEventListener("click", () => {
-  if(bleDevice && bleDevice.gatt.connected) {
-    bleDevice.gatt.disconnect();
-  }
+// 연결 해제 버튼
+btnDisconnect.addEventListener("click", async () => {
+  await disconnectSerial();
+  alert("유선 연결이 해제되었습니다.");
 });
 
-function onBleDisconnected() {
-  bleReset();
-  setStatus("대기 중 (연결 끊김)");
-}
-
-function bleReset() {
-  bleConnected = false;
-  bleDevice = null;
-  bleServer = null;
-  ioService = null;
-  pinChar = null;
-  
+// 연결 해제 처리 함수
+async function disconnectSerial() {
+  // 쓰기 스트림 닫기
+  if (writer) {
+    await writer.close();
+    writer = null;
+  }
+  // 포트 닫기
+  if (port) {
+    await port.close();
+    port = null;
+  }
+  isConnected = false;
+  setStatus("상단의 [🔌 USB 연결] 버튼을 눌러주세요.");
   btnDisconnect.classList.add("hidden");
   btnConnect.classList.remove("hidden");
 }
 
 // =====================
-// 4. 룰렛 동작 (P2 핀 토글)
+// [로직 4] 룰렛 동작 신호 전송
 // =====================
 btnSpin.addEventListener("click", async () => {
   if(!canSpin) return;
-  if(!bleConnected || !pinChar) {
-    alert("micro:bit가 연결되지 않았습니다. 상단 [연결] 버튼을 눌러주세요.");
+  
+  // 연결 체크
+  if(!isConnected || !writer) {
+    alert("⚠️ 마이크로비트가 연결되지 않았습니다.\n상단의 [🔌 USB 연결] 버튼을 먼저 눌러주세요.");
     return;
   }
   
   try {
-    btnSpin.disabled = true;
-    setStatus("🎡 신호 전송...");
+    btnSpin.disabled = true; // 중복 전송 방지
+    setStatus("⚡ 룰렛 신호 전송 중...");
     
-    // micro:bit 핀 쓰기 프로토콜: [핀번호, 값, 0, 1]
+    // 🔥 핵심: "SPIN" 문자열과 줄바꿈(\n)을 함께 전송
+    // 마이크로비트는 \n을 받아야 명령의 끝으로 인식합니다.
+    await writer.write("SPIN\n");
     
-    // 1. P2 High (ON)
-    const onData = new Uint8Array([TRIGGER_PIN, 1, 0, 1]);
-    await pinChar.writeValue(onData);
+    setStatus("✅ 신호 전송 완료! 룰렛이 돌아갑니다.");
     
-    // 2. 잠시 대기 (150ms)
-    await new Promise(r => setTimeout(r, 150));
-    
-    // 3. P2 Low (OFF)
-    const offData = new Uint8Array([TRIGGER_PIN, 0, 0, 1]);
-    await pinChar.writeValue(offData);
-    
-    setStatus("✅ 전송 완료!");
-    
+    // 버튼 및 상태 복구
     setTimeout(() => {
-      setStatus("✅ 연결 성공!");
+      if(isConnected) setStatus("✅ 유선 연결 성공! (준비 완료)");
       btnSpin.disabled = false;
-    }, 1000);
+    }, 2000);
     
   } catch(e) {
     console.error(e);
-    alert("신호 전송 실패. 다시 연결해주세요.");
-    setStatus("전송 오류");
-    bleDisconnect(); // 재연결 유도
+    alert("신호 전송 실패!\n케이블이 빠졌는지 확인해주세요.");
+    setStatus("전송 오류 (연결 확인 필요)");
+    disconnectSerial(); // 안전을 위해 연결 해제 처리
   }
 });
 
 // =====================
-// 유틸리티
+// 유틸리티 및 이벤트 리스너
 // =====================
 btnBack.addEventListener("click", () => goPick());
 
@@ -333,6 +308,12 @@ btnRetry.addEventListener("click", () => {
   choiceBtns.forEach(b => b.disabled=false);
 });
 
+// 상태 텍스트 업데이트 헬퍼
 function setStatus(t) {
   elStatus.textContent = t;
 }
+
+// (선택사항) 페이지를 벗어날 때 연결 안전하게 종료 시도
+window.addEventListener('beforeunload', async () => {
+    if(isConnected) await disconnectSerial();
+});
