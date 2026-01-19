@@ -316,8 +316,9 @@ async function bleConnect() {
   setStatus("장치 선택 중…");
 
   // ✅ 가장 안전한 방식: IO 서비스 가진 micro:bit만 검색
-  bleDevice = await navigator.bluetooth.requestDevice({
-    filters: [{ services: [MB_IO_SERVICE] }],
+bleDevice = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: "BBC micro:bit" }],
+    optionalServices: [MB_IO_SERVICE]
   });
 
   bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
@@ -388,3 +389,4 @@ function setStatus(t) {
 function sleep(ms) {
   return new Promise((res) => setTimeout(res, ms));
 }
+
