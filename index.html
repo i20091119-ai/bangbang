@@ -3,151 +3,109 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>퀴즈 룰렛</title>
-
-  <!-- 폰트 (요청한 스타일) -->
+  <title>퀴즈 룰렛 (유선 버전)</title>
   <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap" rel="stylesheet">
-
-  <!-- Tailwind CDN (경고 뜨지만 프로토타입 OK) -->
   <script src="https://cdn.tailwindcss.com"></script>
-
   <style>
     body { font-family: 'Jua', sans-serif; }
     .title-font { font-family: 'Black Han Sans', sans-serif; }
-
-    /* 오답 버튼 흔들기 */
-    @keyframes shake {
-      0% { transform: translateX(0); }
-      20% { transform: translateX(-6px); }
-      40% { transform: translateX(6px); }
-      60% { transform: translateX(-4px); }
-      80% { transform: translateX(4px); }
-      100% { transform: translateX(0); }
-    }
+    /* 애니메이션 및 터치 효과 */
+    @keyframes shake { 0%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}100%{transform:translateX(0)} }
     .shake { animation: shake 0.4s ease-in-out; }
-
-    /* 큰 버튼 터치감 */
     .tap { transition: transform .06s ease; }
     .tap:active { transform: scale(.98); }
-
-    /* 비활성 버튼 시각 강화 */
     .disabled-look { opacity: .45; filter: grayscale(.2); }
   </style>
 </head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
 
-<body class="bg-amber-50 text-slate-800 min-h-screen">
-  <!-- 헤더 (엄격 준수 스타일) -->
-  <header class="sticky top-0 z-50 shadow-md" style="background:#17D0B0;">
-    <div class="max-w-5xl mx-auto px-4 py-6 flex justify-between items-center gap-3">
+  <header class="sticky top-0 z-50 shadow-md bg-indigo-600">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center gap-3">
       <div class="text-white">
-        <div class="title-font text-xl md:text-3xl leading-tight">퀴즈 룰렛 🎡</div>
-        <div class="text-white/90 text-sm md:text-base">정답을 맞히면 룰렛을 돌릴 수 있어요!</div>
+        <div class="title-font text-2xl md:text-3xl leading-tight">퀴즈 룰렛 🎡</div>
+        <div class="flex items-center gap-1 text-indigo-100 text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          <span>유선(USB) 모드</span>
+        </div>
       </div>
-
       <div class="flex items-center gap-2">
-        <button id="btnConnect"
-          class="tap h-11 px-4 rounded-xl bg-white text-slate-800 font-extrabold shadow hover:bg-slate-100">
-          🔗 연결
+        <button id="btnConnect" class="tap h-11 px-5 rounded-xl bg-white text-indigo-700 font-extrabold shadow-sm hover:bg-indigo-50 flex items-center gap-2">
+          <span>🔌 USB 연결</span>
         </button>
-        <button id="btnDisconnect"
-          class="tap h-11 px-4 rounded-xl bg-slate-900/20 text-white font-extrabold shadow hover:bg-slate-900/30 hidden">
-          ✂️ 해제
+        <button id="btnDisconnect" class="tap h-11 px-5 rounded-xl bg-indigo-800/50 text-white font-extrabold shadow-sm hover:bg-indigo-800/70 hidden flex items-center gap-2">
+          <span>❌ 해제</span>
         </button>
       </div>
     </div>
   </header>
 
-  <!-- 상태바 -->
-  <section class="max-w-5xl mx-auto px-4 mt-4">
-    <div class="bg-white rounded-xl shadow-md p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-      <div class="text-base">
-        상태: <span id="statusText" class="font-extrabold">대기 중</span>
+  <main class="max-w-5xl mx-auto px-4 mt-6 pb-20">
+    <div class="bg-white rounded-2xl shadow-sm p-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-slate-200">
+      <div class="text-lg">
+        상태: <span id="statusText" class="font-extrabold text-indigo-600">USB 연결을 기다리는 중...</span>
       </div>
-      <div class="text-base">
-        직전 오답 잠금: <span id="lockText" class="font-extrabold">없음</span>
+      <div class="text-base text-slate-500">
+        직전 오답 잠금: <span id="lockText" class="font-bold text-slate-700">없음</span>
       </div>
     </div>
-  </section>
 
-  <!-- 메인 -->
-  <main class="max-w-5xl mx-auto px-4 mt-5 pb-16">
-
-    <!-- 화면 1: 문제 선택 -->
-    <section id="screenPick" class="bg-white rounded-xl shadow-lg p-5 md:p-7">
-      <div class="flex items-end justify-between gap-3">
-        <div>
-          <div class="title-font text-2xl md:text-3xl">문제 고르기</div>
-          <div class="text-slate-600 mt-1">1~6번 중 하나를 선택하세요.</div>
+    <section id="screenPick" class="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+      <div class="mb-6">
+        <h2 class="title-font text-3xl text-slate-800">문제 고르기</h2>
+        <p class="text-slate-600 mt-2">원하는 번호를 선택해주세요.</p>
+      </div>
+      <div id="gridButtons" class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         </div>
-        <div class="hidden md:block text-slate-500">👆 버튼을 눌러 시작!</div>
-      </div>
-
-      <div id="gridButtons" class="mt-5 grid grid-cols-2 md:grid-cols-3 gap-4">
-        <!-- app.js가 1~6 버튼 생성 -->
-      </div>
-
-      <div class="mt-5 text-slate-500 text-sm">
-        * 직전에 틀린 문제는 잠깐 선택할 수 없어요(정답을 맞히면 잠금 해제).
-      </div>
     </section>
 
-    <!-- 화면 2: 문제 풀이 -->
-    <section id="screenQuiz" class="bg-white rounded-xl shadow-lg p-5 md:p-7 hidden">
-      <div class="flex items-start justify-between gap-3">
+    <section id="screenQuiz" class="bg-white rounded-2xl shadow-lg p-6 md:p-8 hidden">
+      <div class="flex flex-col md:flex-row justify-between items-start gap-4 mb-8">
         <div>
-          <div id="quizNo" class="title-font text-2xl md:text-3xl">문제</div>
-          <div id="questionText" class="mt-2 text-lg md:text-xl leading-relaxed"></div>
+          <h2 id="quizNo" class="title-font text-3xl text-indigo-600 mb-3">문제</h2>
+          <p id="questionText" class="text-xl md:text-2xl leading-relaxed font-medium text-slate-800"></p>
         </div>
-
-        <button id="btnBack"
-          class="tap h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold">
-          다른 문제 선택
+        <button id="btnBack" class="shrink-0 tap h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-lg">
+          다른 문제
         </button>
       </div>
 
-      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-        <button class="choiceBtn tap rounded-2xl p-4 md:p-5 shadow bg-amber-100 hover:bg-amber-200 text-left"
-                data-choice="A">
-          <div class="font-extrabold text-lg">A</div>
-          <div class="choiceText mt-1 text-base md:text-lg"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <button class="choiceBtn tap rounded-2xl p-5 bg-slate-50 hover:bg-indigo-50 border-2 border-slate-100 hover:border-indigo-200 text-left transition-colors" data-choice="A">
+          <span class="font-extrabold text-indigo-600 text-xl mr-2">A.</span>
+          <span class="choiceText text-xl font-medium text-slate-700"></span>
         </button>
-
-        <button class="choiceBtn tap rounded-2xl p-4 md:p-5 shadow bg-emerald-100 hover:bg-emerald-200 text-left"
-                data-choice="B">
-          <div class="font-extrabold text-lg">B</div>
-          <div class="choiceText mt-1 text-base md:text-lg"></div>
+        <button class="choiceBtn tap rounded-2xl p-5 bg-slate-50 hover:bg-indigo-50 border-2 border-slate-100 hover:border-indigo-200 text-left transition-colors" data-choice="B">
+          <span class="font-extrabold text-indigo-600 text-xl mr-2">B.</span>
+          <span class="choiceText text-xl font-medium text-slate-700"></span>
         </button>
-
-        <button class="choiceBtn tap rounded-2xl p-4 md:p-5 shadow bg-sky-100 hover:bg-sky-200 text-left"
-                data-choice="C">
-          <div class="font-extrabold text-lg">C</div>
-          <div class="choiceText mt-1 text-base md:text-lg"></div>
+        <button class="choiceBtn tap rounded-2xl p-5 bg-slate-50 hover:bg-indigo-50 border-2 border-slate-100 hover:border-indigo-200 text-left transition-colors" data-choice="C">
+          <span class="font-extrabold text-indigo-600 text-xl mr-2">C.</span>
+          <span class="choiceText text-xl font-medium text-slate-700"></span>
         </button>
-
-        <button class="choiceBtn tap rounded-2xl p-4 md:p-5 shadow bg-violet-100 hover:bg-violet-200 text-left"
-                data-choice="D">
-          <div class="font-extrabold text-lg">D</div>
-          <div class="choiceText mt-1 text-base md:text-lg"></div>
+        <button class="choiceBtn tap rounded-2xl p-5 bg-slate-50 hover:bg-indigo-50 border-2 border-slate-100 hover:border-indigo-200 text-left transition-colors" data-choice="D">
+          <span class="font-extrabold text-indigo-600 text-xl mr-2">D.</span>
+          <span class="choiceText text-xl font-medium text-slate-700"></span>
         </button>
       </div>
 
-      <div id="feedback" class="mt-5 text-xl font-extrabold"></div>
+      <div class="min-h-[4rem] flex items-center mb-6">
+        <div id="feedback" class="text-2xl font-extrabold"></div>
+      </div>
 
-      <div class="mt-6 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-        <button id="btnRetry"
-          class="tap h-12 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold shadow hidden">
-          다시 풀기 / 다른 문제 선택
+      <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-end">
+        <button id="btnRetry" class="tap h-14 px-8 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xl hidden">
+          다시 풀기
         </button>
-
-        <button id="btnSpin" disabled
-          class="tap h-12 px-5 rounded-xl bg-slate-200 text-slate-600 font-extrabold shadow">
-          🎡 룰렛 돌리기
+        <button id="btnSpin" disabled class="tap h-14 px-8 rounded-2xl bg-slate-200 text-slate-400 font-extrabold text-xl flex justify-center items-center gap-3 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+          <span class="text-2xl">🎡</span>
+          <span>룰렛 돌리기</span>
         </button>
       </div>
     </section>
   </main>
 
-  <!-- 앱 로직 -->
   <script src="./app.js"></script>
 </body>
 </html>
