@@ -1,290 +1,233 @@
-/*************************************************
- * Quiz Roulette – WIRED USB Final (No Filter)
- * - Target: Android Tablet + Chrome + OTG
- * - Fix: Removed filters to show ALL serial devices
- *************************************************/
+/* =========================================================
+   Quiz Roulette (PC + Chrome Web Serial + micro:bit USB)
+   Protocol:
+     PC -> micro:bit: "PING\n", "SPIN\n", "STOP\n"
+     micro:bit -> PC: "READY\n", "PONG\n", "DONE\n", "STOPPED\n", "ERR:...\n"
+   ========================================================= */
 
-// 구글 스프레드시트 Apps Script URL
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz1y7KfJriDiw5i8OaDJBp6Zwz_ePVR1DgFaQeT3Pjkfw5fSxEKbI6Bd6FX4msxHEs6/exec";
-const JSONP_CALLBACK = "onQuestionsLoaded";
+const $ = (sel) => document.querySelector(sel);
 
-// =====================
-// 유선 통신(Serial) 변수
-// =====================
+const btnConnect = $("#btnConnect");
+const btnDisconnect = $("#btnDisconnect");
+const btnPing = $("#btnPing");
+const btnSpin = $("#btnSpin");
+const btnStop = $("#btnStop");
+const btnNext = $("#btnNext");
+
+const connDot = $("#connDot");
+const connText = $("#connText");
+const logEl = $("#log");
+const questionEl = $("#question");
+
+// ---- Simple question bank (원하면 여기만 바꾸면 됨) ----
+const QUESTIONS = [
+  "기후변화의 원인 중 하나를 말해보세요.",
+  "해수면 상승이 섬나라에 미치는 영향을 설명해보세요.",
+  "산불이 크게 번지는 이유 2가지를 말해보세요.",
+  "미디어 리터러시가 왜 중요한가요?",
+  "AI를 안전하게 쓰기 위한 규칙 1가지를 말해보세요."
+];
+let qIndex = 0;
+
+// ---- Web Serial state ----
 let port = null;
 let writer = null;
-let isConnected = false;
+let reader = null;
+let readLoopAbort = false;
 
-// =====================
-// 퀴즈 상태 변수
-// =====================
-let questions = [];
-let selectedId = null;
-let lastWrongId = null;
-let canSpin = false;
+// Text stream helpers
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
-// =====================
-// DOM 요소
-// =====================
-const elStatus = document.getElementById("statusText");
-const elLock = document.getElementById("lockText");
-const screenPick = document.getElementById("screenPick");
-const screenQuiz = document.getElementById("screenQuiz");
-const gridButtons = document.getElementById("gridButtons");
-const quizNo = document.getElementById("quizNo");
-const questionText = document.getElementById("questionText");
-const feedback = document.getElementById("feedback");
-const btnBack = document.getElementById("btnBack");
-const btnRetry = document.getElementById("btnRetry");
-const btnSpin = document.getElementById("btnSpin");
-const btnConnect = document.getElementById("btnConnect");
-const btnDisconnect = document.getElementById("btnDisconnect");
-const choiceBtns = Array.from(document.querySelectorAll(".choiceBtn"));
-const choiceTexts = Array.from(document.querySelectorAll(".choiceText"));
-
-// =====================
-// 초기화
-// =====================
-// 브라우저 지원 확인
-if (!navigator.serial) {
-  alert("⚠️ 크롬(Chrome) 브라우저에서 실행해주세요.\n현재 브라우저는 USB 연결을 지원하지 않습니다.");
-  setStatus("브라우저 호환성 오류");
-} else {
-  setStatus("상단의 [🔌 USB 연결] 버튼을 눌러주세요.");
+// ---------- UI helpers ----------
+function log(...args) {
+  const msg = args.map(a => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+  logEl.textContent += msg + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
-updateLockText();
-setSpinEnabled(false);
-setBackHint(false);
-goPick();
-loadQuestions();
+function setConnectedUI(isConnected) {
+  connDot.classList.toggle("on", isConnected);
+  connText.textContent = isConnected ? "연결됨" : "미연결";
+  btnConnect.disabled = isConnected;
+  btnDisconnect.disabled = !isConnected;
+  btnPing.disabled = !isConnected;
+  btnSpin.disabled = !isConnected;
+  btnStop.disabled = !isConnected;
+}
 
-// =====================
-// 1. 문항 데이터 로드
-// =====================
-function loadQuestions() {
-  window[JSONP_CALLBACK] = (data) => {
-    questions = normalizeQuestions(data);
-    console.log(`${questions.length}개 문항 로드 완료`);
-    renderPick();
-  };
+function setQuestion() {
+  questionEl.textContent = QUESTIONS[qIndex % QUESTIONS.length];
+}
 
-  const s = document.createElement("script");
-  s.src = `${APPS_SCRIPT_URL}?callback=${JSONP_CALLBACK}&_=${Date.now()}`;
-  s.onerror = () => {
-      setStatus("문항 로드 실패 (인터넷 확인 필요)");
+// ---------- Serial core ----------
+function ensureWebSerialAvailable() {
+  if (!window.isSecureContext) {
+    throw new Error("보안 컨텍스트가 아닙니다. HTTPS 또는 localhost에서 실행해야 합니다.");
   }
-  document.body.appendChild(s);
-}
-
-function normalizeQuestions(data) {
-  return (Array.isArray(data) ? data : [])
-    .filter(q => q && q.enabled === true)
-    .map(q => ({
-      id: Number(q.id),
-      question: String(q.question||""),
-      choiceA: String(q.choiceA||""),
-      choiceB: String(q.choiceB||""),
-      choiceC: String(q.choiceC||""),
-      choiceD: String(q.choiceD||""),
-      answer: String(q.answer||"A").toUpperCase().trim()
-    }))
-    .sort((a,b)=>a.id-b.id);
-}
-
-// =====================
-// 2. 화면 로직 (퀴즈)
-// =====================
-function goPick() {
-  selectedId = null; canSpin = false; setSpinEnabled(false);
-  feedback.textContent = ""; btnRetry.classList.add("hidden"); setBackHint(false);
-  screenQuiz.classList.add("hidden"); screenPick.classList.remove("hidden");
-  renderPick(); updateLockText();
-}
-
-function goQuiz(id) {
-  const q = questions.find(x => x.id === id);
-  if(!q) return;
-  selectedId = id; canSpin = false; setSpinEnabled(false);
-  feedback.textContent = ""; btnRetry.classList.add("hidden"); setBackHint(false);
-  screenPick.classList.add("hidden"); screenQuiz.classList.remove("hidden");
-  
-  quizNo.textContent = `문제 ${q.id}번`;
-  questionText.textContent = q.question;
-  
-  const choices = {A:q.choiceA, B:q.choiceB, C:q.choiceC, D:q.choiceD};
-  choiceBtns.forEach((btn, idx) => {
-    const c = btn.dataset.choice;
-    choiceTexts[idx].textContent = choices[c]||"";
-    btn.disabled = false;
-    btn.onclick = () => handleChoice(c);
-  });
-}
-
-function renderPick() {
-  const colors = ["bg-rose-200 text-rose-800","bg-amber-200 text-amber-800","bg-emerald-200 text-emerald-800","bg-sky-200 text-sky-800","bg-violet-200 text-violet-800","bg-lime-200 text-lime-800"];
-  const hasIds = new Set(questions.map(q=>q.id));
-  gridButtons.innerHTML = "";
-  for(let id=1; id<=6; id++) {
-    const exists = hasIds.has(id);
-    const locked = (lastWrongId === id);
-    const btn = document.createElement("button");
-    btn.className = `tap h-28 md:h-40 rounded-2xl shadow-md text-5xl md:text-6xl font-black flex items-center justify-center ${colors[id-1]||"bg-gray-200"}`;
-    if(!exists || locked) { btn.disabled = true; btn.classList.add("disabled-look"); }
-    btn.textContent = String(id);
-    btn.onclick = () => goQuiz(id);
-    gridButtons.appendChild(btn);
+  if (!("serial" in navigator)) {
+    throw new Error("navigator.serial이 없습니다. Chrome 탭에서 실행 중인지 확인하세요.");
   }
 }
 
-function updateLockText() { elLock.textContent = lastWrongId ? `${lastWrongId}번` : "없음"; }
+async function connectSerial() {
+  ensureWebSerialAvailable();
 
-function handleChoice(choice) {
-  const q = questions.find(x => x.id === selectedId);
-  if(!q) return;
-  choiceBtns.forEach(b => b.disabled=true);
-  
-  if(choice === q.answer) {
-    feedback.innerHTML = "🎉 정답입니다!<br>룰렛을 돌려주세요.";
-    feedback.className = "text-emerald-600 animate-bounce";
-    lastWrongId = null; updateLockText(); canSpin = true; setSpinEnabled(true);
-  } else {
-    feedback.innerHTML = "앗, 오답입니다.<br>다른 문제를 선택해주세요.";
-    feedback.className = "text-rose-500 shake";
-    lastWrongId = selectedId; updateLockText(); canSpin = false; setSpinEnabled(false);
-    btnRetry.classList.remove("hidden"); setBackHint(true);
-  }
+  log("포트 선택창 열기...");
+  // 필터를 걸면 어떤 환경에선 안 잡히는 경우가 있어, 일단 무필터(가장 안정)
+  port = await navigator.serial.requestPort();
+
+  log("포트 오픈(115200)...");
+  await port.open({ baudRate: 115200 });
+
+  // writer 준비
+  writer = port.writable.getWriter();
+
+  // reader 준비 (라인 단위 파싱)
+  readLoopAbort = false;
+  startReadLoop();
+
+  setConnectedUI(true);
+  log("✅ 연결 완료");
 }
 
-function setSpinEnabled(enabled) {
-  btnSpin.disabled = !enabled;
-  if(enabled) {
-    btnSpin.className = "tap h-14 px-8 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-xl flex justify-center items-center gap-3 shadow-lg";
-  } else {
-    btnSpin.className = "h-14 px-8 rounded-2xl bg-slate-200 text-slate-400 font-black text-xl flex justify-center items-center gap-3 cursor-not-allowed opacity-70";
-  }
-}
-
-function setBackHint(isWrong) {
-  if(isWrong) {
-    btnBack.className = "shrink-0 tap h-12 px-6 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-lg shake";
-    btnBack.textContent = "🔙 다른 문제 선택";
-    setTimeout(()=>btnBack.classList.remove("shake"), 650);
-  } else {
-    btnBack.className = "shrink-0 tap h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-lg";
-    btnBack.textContent = "다른 문제";
-  }
-}
-
-// =====================
-// 3. 🔥 유선 연결 (핵심 수정됨) 🔥
-// =====================
-btnConnect.addEventListener("click", async () => {
-  if (!navigator.serial) {
-    alert("크롬(Chrome) 앱에서 실행해주세요.");
-    return;
-  }
+async function disconnectSerial() {
+  readLoopAbort = true;
 
   try {
-    setStatus("장치 선택 팝업을 확인해주세요...");
-    
-    // 🚨 [핵심 수정] filters: [] 
-    // 빈 필터를 쓰거나 아예 빈 객체({})를 넘기면 
-    // 크롬은 연결 가능한 '모든' 시리얼 포트를 보여줍니다.
-    // 안드로이드에서 이름이 이상하게 뜨는 장치도 다 잡힙니다.
-    port = await navigator.serial.requestPort({});
-    
-    setStatus("장치에 연결하는 중...");
-
-    // 통신 속도 115200 (마이크로비트 표준)
-    await port.open({ baudRate: 115200 });
-
-    const textEncoder = new TextEncoderStream();
-    const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
-    writer = textEncoder.writable.getWriter();
-
-    isConnected = true;
-    setStatus("✅ 유선 연결 성공! (준비 완료)");
-    
-    btnConnect.classList.add("hidden");
-    btnDisconnect.classList.remove("hidden");
-
-    // 진동 피드백
-    if(navigator.vibrate) navigator.vibrate(100);
-
-  } catch (e) {
-    console.error(e);
-    // 사용자가 취소한 경우는 에러 아님
-    if (e.name !== "NotFoundError") {
-        alert(`연결 실패:\n${e.message}\n\nOTG 젠더가 꽉 꽂혔는지 확인하세요.`);
+    if (reader) {
+      try { await reader.cancel(); } catch {}
+      try { reader.releaseLock(); } catch {}
+      reader = null;
     }
-    setStatus("연결이 취소되었거나 실패했습니다.");
-    disconnectSerial();
+  } catch {}
+
+  try {
+    if (writer) {
+      try { writer.releaseLock(); } catch {}
+      writer = null;
+    }
+  } catch {}
+
+  try {
+    if (port) {
+      await port.close();
+      port = null;
+    }
+  } catch {}
+
+  setConnectedUI(false);
+  log("🔌 연결 해제");
+}
+
+async function writeLine(line) {
+  if (!writer) throw new Error("writer가 없습니다. 먼저 연결하세요.");
+  const data = encoder.encode(line + "\n");
+  await writer.write(data);
+  log("➡️ TX:", line);
+}
+
+// Read loop: accumulate buffer, split by \n
+async function startReadLoop() {
+  if (!port?.readable) return;
+
+  reader = port.readable.getReader();
+  let buffer = "";
+
+  (async () => {
+    try {
+      while (!readLoopAbort) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let idx;
+        while ((idx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, idx).replace(/\r/g, "").trim();
+          buffer = buffer.slice(idx + 1);
+          if (line) handleIncomingLine(line);
+        }
+      }
+    } catch (e) {
+      if (!readLoopAbort) {
+        log("❌ RX 루프 오류:", e?.name || "Error", e?.message || String(e));
+      }
+    } finally {
+      try { reader?.releaseLock(); } catch {}
+    }
+  })();
+}
+
+function handleIncomingLine(line) {
+  log("⬅️ RX:", line);
+
+  // micro:bit 응답 기반 UI 반응(원하면 더 확장 가능)
+  if (line === "READY") {
+    // 부팅 직후
+    return;
+  }
+  if (line === "DONE") {
+    log("✅ 룰렛 효과 종료(DONE). 이제 학생에게 질문!");
+    return;
+  }
+  if (line === "STOPPED") {
+    log("🛑 효과 중지(STOPPED).");
+    return;
+  }
+  if (line.startsWith("ERR:")) {
+    log("⚠️ micro:bit 오류:", line);
+    return;
+  }
+}
+
+// ---------- Events ----------
+btnConnect.addEventListener("click", async () => {
+  try {
+    await connectSerial();
+    setQuestion();
+  } catch (e) {
+    log("❌ 연결 실패:", e?.message || String(e));
+    setConnectedUI(false);
   }
 });
 
 btnDisconnect.addEventListener("click", async () => {
   await disconnectSerial();
-  alert("연결이 해제되었습니다.");
 });
 
-async function disconnectSerial() {
-  if (writer) {
-    await writer.close();
-    writer = null;
-  }
-  if (port) {
-    await port.close();
-    port = null;
-  }
-  isConnected = false;
-  setStatus("상단의 [🔌 USB 연결] 버튼을 눌러주세요.");
-  btnDisconnect.classList.add("hidden");
-  btnConnect.classList.remove("hidden");
-}
-
-// =====================
-// 4. 신호 전송 (SPIN)
-// =====================
-btnSpin.addEventListener("click", async () => {
-  if(!canSpin) return;
-  
-  if(!isConnected || !writer) {
-    alert("마이크로비트가 연결되지 않았습니다.\n먼저 [🔌 USB 연결]을 해주세요.");
-    return;
-  }
-  
+btnPing.addEventListener("click", async () => {
   try {
-    btnSpin.disabled = true;
-    setStatus("⚡ 신호 전송 중...");
-    
-    // "SPIN" 문자열과 줄바꿈(\n) 전송
-    await writer.write("SPIN\n");
-    
-    setStatus("✅ 신호 전송 완료!");
-    
-    setTimeout(() => {
-      if(isConnected) setStatus("✅ 유선 연결 성공! (준비 완료)");
-      btnSpin.disabled = false;
-    }, 2000);
-    
-  } catch(e) {
-    console.error(e);
-    alert("전송 실패. 케이블을 확인하세요.");
-    setStatus("전송 오류");
-    disconnectSerial();
+    await writeLine("PING");
+  } catch (e) {
+    log("❌ PING 실패:", e?.message || String(e));
   }
 });
 
-// 유틸
-btnBack.addEventListener("click", () => goPick());
-btnRetry.addEventListener("click", () => {
-  feedback.textContent = ""; btnRetry.classList.add("hidden");
-  setSpinEnabled(false); choiceBtns.forEach(b => b.disabled=false);
+btnSpin.addEventListener("click", async () => {
+  try {
+    await writeLine("SPIN");
+  } catch (e) {
+    log("❌ SPIN 실패:", e?.message || String(e));
+  }
 });
-function setStatus(t) { elStatus.textContent = t; }
 
-// 페이지 종료 시 연결 해제 시도
-window.addEventListener('beforeunload', async () => {
-    if(isConnected) await disconnectSerial();
+btnStop.addEventListener("click", async () => {
+  try {
+    await writeLine("STOP");
+  } catch (e) {
+    log("❌ STOP 실패:", e?.message || String(e));
+  }
 });
+
+btnNext.addEventListener("click", () => {
+  qIndex++;
+  setQuestion();
+});
+
+// ---------- Init ----------
+setConnectedUI(false);
+setQuestion();
+log("페이지 로드 완료.");
+log("조건: HTTPS 또는 localhost, Chrome 탭에서 실행.");
