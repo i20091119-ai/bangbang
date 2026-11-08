@@ -6,22 +6,25 @@
 <style>[hidden]{display:none!important}body{margin:0}img{max-width:100%}</style>
 <title>고래 낙하 경기장</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
-/* 레이아웃: 상단 탭 + 미션 판 선택 + 도면 + 오른쪽 정보 패널 (좁으면 아래로) */
+/* 레이아웃: 상단 탭 + 넓은 도면 캔버스 + 오른쪽 정보 패널 (좁으면 아래로) */
 :root{
   --bg:#F7F3EA; --surface:#FFFFFF; --fg:#0E2240; --muted:#4A5A6E; --line:#D9D2C2;
-  --accent:#F08A6C; --accent-ink:#B44A33; --chip:#0E2240; --chip-ink:#F7F3EA; --yellow:#F6D57A;
+  --accent:#F08A6C; --accent-ink:#B44A33; --chip:#0E2240; --chip-ink:#F7F3EA;
+  /* 바닥 매트 실제 색: 테마와 무관 */
+  --sand:#EAD9B0; --sea:#9ADCD9; --deep:#0E2240; --yellow:#F6D57A; --aqua:#6CCBCB; --red:#E0574A; --blue:#3B6FD8;
   --font-display:'Jua','Noto Sans KR',system-ui,sans-serif;
   --font-body:'Noto Sans KR',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
   --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#081830; --surface:#0F2645; --fg:#EEF2F4; --muted:#A9BCCB; --line:#24406A;
-  --accent-ink:#F5A88F; --chip:#6CCBCB; --chip-ink:#0E2240; color-scheme:dark}}
+  --accent:#F08A6C; --accent-ink:#F5A88F; --chip:#6CCBCB; --chip-ink:#0E2240; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#081830; --surface:#0F2645; --fg:#EEF2F4; --muted:#A9BCCB; --line:#24406A;
-  --accent-ink:#F5A88F; --chip:#6CCBCB; --chip-ink:#0E2240; color-scheme:dark}
+  --accent:#F08A6C; --accent-ink:#F5A88F; --chip:#6CCBCB; --chip-ink:#0E2240; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.6;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
@@ -40,43 +43,34 @@ section.view{padding-top:22px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px;min-width:0}
 .panel h2,.panel h3{font-family:var(--font-display);font-weight:400;margin:0 0 8px}
 .panel h2{font-size:24px}.panel h3{font-size:20px}
-.canvas{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;overflow-x:auto;min-width:0}
-.canvas svg{display:block;width:100%;height:auto}
-#planBox svg{min-width:520px;max-height:560px}
+.canvas{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px;overflow-x:auto;min-width:0}
+.canvas svg{display:block;width:100%;min-width:640px;height:auto}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
 button{font:inherit;font-weight:700;font-size:14px;cursor:pointer;border-radius:999px;padding:7px 14px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg)}
 button[aria-pressed="true"]{background:var(--chip);color:var(--chip-ink);border-color:var(--chip)}
 .m1{--m:#E0574A}.m2{--m:#C99A1E}.m3{--m:#2A9C9C}.m4{--m:#3B6FD8}
 button.mbtn{border-color:var(--m)}
 button.mbtn[aria-pressed="true"]{background:var(--m);color:#fff;border-color:var(--m)}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:0}
-.kv dt{color:var(--muted)}.kv dd{margin:0}
-.mono{font-family:var(--font-mono);font-size:13px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-family:var(--font-mono);font-size:13px}
 .note{font-size:13px;color:var(--muted)}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12px;letter-spacing:.04em;color:var(--muted);font-weight:700}
 td.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tablewrap{overflow-x:auto}
-.ovgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-@media (max-width:760px){.ovgrid{grid-template-columns:minmax(0,1fr)}}
-.ovcard{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:8px}
-.ovcard .tag{align-self:flex-start;background:var(--m);color:#fff;font-weight:700;font-size:12px;padding:2px 10px;border-radius:999px}
-.ovcard h3{font-family:var(--font-display);font-weight:400;font-size:21px;margin:0}
-.ovcard p{margin:0;font-size:14px;color:var(--muted)}
-.ovcard p b{color:var(--fg)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px}
+.mcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0}
+.mcard .tag{display:inline-block;background:var(--m);color:#fff;font-weight:700;font-size:12px;padding:2px 10px;border-radius:999px}
+.mcard h3{font-family:var(--font-display);font-weight:400;font-size:20px;margin:6px 0 4px}
+.mcard p{margin:0;font-size:14px;color:var(--muted)}
 #three{width:100%;height:min(68vh,620px);border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#cfe3e8;touch-action:none}
-.inputs{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
-.inputs label{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:14px}
-.inputs input{width:58px;font:inherit;font-weight:700;text-align:center;padding:5px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg)}
-.stat{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
-.stat span{background:var(--yellow);color:#0E2240;font-weight:700;font-size:14px;padding:4px 14px;border-radius:999px}
-.cuts{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
-.cut{display:flex;flex-direction:column;gap:6px}
-.cut svg{max-width:170px}
-.cut b{font-size:14px}.cut span{font-size:12px;color:var(--muted)}
+.stepper{display:inline-flex;align-items:center;gap:8px}
+.stepper input{width:64px;font:inherit;font-weight:700;text-align:center;padding:6px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg)}
+.opt{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:14px 0}
+.opt .panel{padding:14px 16px}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:1px 9px;border-radius:999px;background:var(--yellow);color:#0E2240;margin-left:6px;vertical-align:2px}
 ol.steps{padding-left:22px;margin:6px 0 0}ol.steps li{margin:4px 0}
-.cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:16px}
 .hit{cursor:pointer}.hit:hover{filter:brightness(1.08)}
 .sel{stroke:#F08A6C!important;stroke-width:1!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -86,7 +80,7 @@ ol.steps{padding-left:22px;margin:6px 0 0}ol.steps li{margin:4px 0}
 <header>
   <div>
     <h1>고래 낙하 경기장</h1>
-    <p class="sub">2026 코딩앤메이커 with AI캠프 · AI 레고 로봇 · 미션별 판 4종 · 전지 제작</p>
+    <p class="sub">2026 코딩앤메이커 with AI캠프 · AI 레고 로봇 · 180 × 90 cm · 1세트 기준</p>
   </div>
   <nav aria-label="보기 전환">
     <a href="#plan">평면도</a><a href="#overview">개요도</a><a href="#view3d">3D</a><a href="#materials">준비물</a>
@@ -94,27 +88,39 @@ ol.steps{padding-left:22px;margin:6px 0 0}ol.steps li{margin:4px 0}
 </header>
 
 <section class="view" id="v-plan">
-  <div class="toolbar" id="planBtns"></div>
   <div class="grid">
     <div>
       <div class="toolbar">
         <button id="tgDim" aria-pressed="true">치수</button>
-        <button id="tgGrid" aria-pressed="true">5cm 격자</button>
+        <button id="tgGrid" aria-pressed="true">10cm 격자</button>
         <span class="note">소품을 누르면 크기·위치 표시</span>
       </div>
       <div class="canvas" id="planBox"></div>
     </div>
-    <aside class="panel" id="info"></aside>
+    <aside class="panel" id="info">
+      <h2>배치 기준</h2>
+      <dl class="kv">
+        <dt>바닥</dt><dd>180 × 90 cm</dd>
+        <dt>원점</dt><dd>왼쪽 위 모서리 (0,0)</dd>
+        <dt>X</dt><dd>오른쪽 방향 (해변 → 심해)</dd>
+        <dt>Y</dt><dd>아래쪽 방향</dd>
+        <dt>구역</dt><dd>해변 50 · 얕은 바다 80 · 심해 50</dd>
+        <dt>경계벽</dt><dd>높이 5 cm (선택)</dd>
+      </dl>
+      <p class="note">모든 세트 같은 좌표. 소품 위치 다르면 공정성 문제.</p>
+    </aside>
   </div>
   <div class="panel" style="margin-top:20px">
-    <h3 id="coordTitle">배치 좌표표</h3>
+    <h3>배치 좌표표</h3>
     <div class="tablewrap"><table id="coordTable"></table></div>
-    <p class="note">X·Y: 판 왼쪽 위 모서리에서 소품 왼쪽 위 모서리까지 거리(cm). 모든 판 같은 좌표.</p>
+    <p class="note">X·Y: 소품 왼쪽 위 모서리 기준 거리(cm). 줄자로 왼쪽 벽·위쪽 벽에서 재기.</p>
   </div>
 </section>
 
 <section class="view" id="v-overview" hidden>
-  <div class="ovgrid" id="ovGrid"></div>
+  <div class="toolbar" id="ovBtns"></div>
+  <div class="canvas" id="ovBox"></div>
+  <div class="cards" id="ovCards"></div>
 </section>
 
 <section class="view" id="v-view3d" hidden>
@@ -123,244 +129,252 @@ ol.steps{padding-left:22px;margin:6px 0 0}ol.steps li{margin:4px 0}
     <button class="mbtn m2" data-m="2">② 그물</button>
     <button class="mbtn m3" data-m="3">③ 선박</button>
     <button class="mbtn m4" data-m="4">④ 고래 낙하</button>
-    <button id="camAll">판 4종 전체</button>
     <button id="camTop">위에서</button>
+    <button id="camReset">처음 시점</button>
   </div>
-  <div id="three" role="img" aria-label="미션 판 4종 3D 모형. 드래그로 회전, 휠·두 손가락으로 확대"></div>
-  <p class="note" id="d3Status">미션 버튼: 해당 판 확대 + 로봇 이동 재생 · 드래그 회전 · 휠 확대. 로봇 크기는 드라이빙 베이스 1 근사치(약 16×20 cm).</p>
+  <div id="three" role="img" aria-label="경기장 3D 모형. 드래그로 회전, 휠·두 손가락으로 확대"></div>
+  <p class="note" id="d3Status">드래그 회전 · 휠 확대 · 미션 버튼으로 로봇 이동 재생. 로봇 크기는 드라이빙 베이스 1 근사치(약 16×20 cm).</p>
 </section>
 
 <section class="view" id="v-materials" hidden>
   <div class="panel">
-    <h2>준비물</h2>
-    <div class="inputs">
-      <label>참가 가족 <input id="teams" type="number" min="1" max="60" value="25" inputmode="numeric">팀</label>
-      <label class="m1" style="color:var(--m)">① 판 <input id="n1" type="number" min="0" max="10" value="2" inputmode="numeric"></label>
-      <label class="m2" style="color:var(--m)">② 판 <input id="n2" type="number" min="0" max="10" value="2" inputmode="numeric"></label>
-      <label class="m3" style="color:var(--m)">③ 판 <input id="n3" type="number" min="0" max="10" value="2" inputmode="numeric"></label>
-      <label class="m4" style="color:var(--m)">④ 판 <input id="n4" type="number" min="0" max="10" value="2" inputmode="numeric"></label>
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center">
+      <h2 style="margin:0">준비물</h2>
+      <label class="stepper">경기장 세트 수
+        <button id="sMinus" aria-label="한 세트 줄이기">−</button>
+        <input id="sets" type="number" min="1" max="20" value="4" inputmode="numeric">
+        <button id="sPlus" aria-label="한 세트 늘리기">+</button>
+      </label>
     </div>
-    <div class="stat" id="stat"></div>
+    <div class="opt">
+      <div class="panel"><h3>바닥 A · 현수막 출력<span class="badge">권장</span></h3>
+        <p class="note">1:1 도안 그대로 출력. 구김 적고 접어서 보관. 책상 4개(60×45) 이어 붙인 면 또는 강당 바닥.</p>
+        <p class="note"><a href="mat_180x90cm.pdf" download style="color:var(--accent-ink);font-weight:700">도안 PDF 받기 (1800×900 mm)</a> · <a href="mat_180x90cm.svg" download style="color:var(--accent-ink);font-weight:700">SVG</a></p></div>
+      <div class="panel"><h3>바닥 B · 우드락 직접 제작</h3>
+        <p class="note">우드락 900×600 3장을 구역별로. 색 시트지 또는 색 전지로 해변·바다·심해 색 입히기.</p></div>
+    </div>
     <div class="tablewrap"><table id="matTable"></table></div>
-    <p class="note">전지 규격 788 × 1091 mm 기준. 색은 판 구분용(로봇이 바닥 색을 읽는 미션 없음) — 같은 색이 없으면 다른 색 전지도 무방.</p>
   </div>
-  <div class="panel" style="margin-top:16px">
-    <h3>전지 재단도</h3>
-    <div class="cuts" id="cuts"></div>
-  </div>
-  <div class="cards2">
+  <div class="cards">
     <div class="panel"><h3>제작 순서</h3>
       <ol class="steps">
-        <li>재단도대로 전지 자르기</li>
-        <li>④ 판: 하늘 띠 양 끝에 베이지(해변)·남색(심해) 조각 붙이기</li>
-        <li>바닥에 판 깔고 네 변 투명 테이프 고정</li>
-        <li>평면도 좌표대로 출발·구역 선(흰 테이프)·항로선(검정) 붙이기</li>
-        <li>고래 소품 제작 · 좌표대로 배치</li>
-        <li>판마다 A4 미션 표지 세우기</li>
-        <li>드라이빙 베이스 1로 판별 시험 주행</li>
+        <li>바닥 깔기 · 양면테이프로 책상에 고정</li>
+        <li>경계벽 띠 두르기 (선택)</li>
+        <li>구역 선 · 출발 · 수거 · 낙하 구역 표시 (현수막은 생략)</li>
+        <li>③ 항로선 검정 테이프 · 경고 구역 노랑</li>
+        <li>고래 소품 3종 제작 · 좌표대로 배치</li>
+        <li>쓰레기 블록 3개 배치</li>
+        <li>드라이빙 베이스 1로 4개 미션 시험 주행</li>
       </ol></div>
     <div class="panel"><h3>사전 확인</h3>
       <ol class="steps">
-        <li>전지 가장자리 들뜸 · 바퀴 걸림</li>
-        <li>④ 좌초 고래 무게 · 로봇이 밀 수 있는지</li>
-        <li>③ 항로 고래 높이 · 거리 센서에 잡히는지</li>
-        <li>① 큐브 색 · 컬러 센서 인식</li>
-        <li>② 고리 지름 · 팔 모터로 빼낼 수 있는지</li>
-        <li>판 사이 통로 · 가족 동선</li>
+        <li>좌초 고래 무게 · 로봇이 밀 수 있는지</li>
+        <li>항로 고래 높이 · 거리 센서에 잡히는지</li>
+        <li>큐브 색 · 컬러 센서 인식 (빨강·노랑·파랑)</li>
+        <li>그물 고리 지름 · 팔 모터로 걸어 뺄 수 있는지</li>
+        <li>바닥 이음새 턱 · 바퀴 걸림 없는지</li>
       </ol></div>
   </div>
 </section>
 </div>
 
 <script>
-/* ===== 미션 판 데이터 (단위 cm, 원점 = 판 왼쪽 위) ===== */
-const COL={sand:'#EAD9B0',sea:'#9ADCD9',deep:'#0E2240'};
-const MC={1:'#E0574A',2:'#C99A1E',3:'#2A9C9C',4:'#3B6FD8'};
-const ROBOT={w:16,l:20,h:12};
-const BOARDS=[
- {n:1,name:'바다 쓰레기',W:60,H:60,paper:'하늘 전지 1장 → 1판',
-  zones:[{x:0,w:60,fill:COL.sea,name:'얕은 바다',ink:'#0E2240'}],
-  areas:[{id:'base',name:'출발',x:2,y:38,w:24,h:20,stroke:'#FFFFFF'},
-         {id:'collect',name:'수거 구역',x:2,y:2,w:24,h:24,stroke:'#E0574A',desc:'블록이 선 안에 들어오면 1개 성공. 3개 모두 성공 시 완료.'}],
-  props:[{id:'cR',name:'쓰레기 블록 (빨강)',kind:'cube',x:42,y:45.5,w:5,h:5,z:5,color:'#E0574A',mat:'원목 큐브 5 cm'},
-         {id:'cY',name:'쓰레기 블록 (노랑)',kind:'cube',x:37.5,y:22.5,w:5,h:5,z:5,color:'#F6C343',mat:'원목 큐브 5 cm'},
-         {id:'cB',name:'쓰레기 블록 (파랑)',kind:'cube',x:47.5,y:7.5,w:5,h:5,z:5,color:'#3B6FD8',mat:'원목 큐브 5 cm'}],
-  goal:'색깔 블록 3개 · 수거 구역으로',ok:'블록이 수거 구역 선 안',sensor:'컬러 센서 · 팔 모터',
-  path:[[14,48],[32,48],[16,48],[16,18]],lbl:[30,40]},
- {n:2,name:'어업 그물',W:60,H:45,paper:'남색 전지 1장 → 2판',
-  zones:[{x:0,w:60,fill:COL.deep,name:'심해',ink:'#F6D57A'}],
-  areas:[{id:'base',name:'출발',x:2,y:12.5,w:24,h:20,stroke:'#FFFFFF'}],
-  props:[{id:'netwhale',name:'그물 고래',kind:'whale',x:30,y:16.5,w:26,h:12,z:4,color:'#5B7FA6',mat:'우드락 10T 고래판 26×12 cm'},
-         {id:'post',name:'그물 기둥 + 고리',kind:'post',x:39,y:22,w:1,h:1,z:12,color:'#8B5A2B',mat:'환봉 Ø10 mm (노출 12 cm) · 고리 Ø8~10 cm',desc:'고리가 기둥에서 완전히 빠지면 성공.'}],
-  goal:'고래 기둥의 고리 빼내기',ok:'고리가 기둥에서 완전히 빠짐',sensor:'팔 모터 (갈고리)',
-  path:[[14,22.5],[24,22.5],[12,22.5]],ov:[[14,22.5],[24,22.5]],lbl:[22,38]},
- {n:3,name:'선박 충돌',W:109,H:30,paper:'하늘 전지 1장 → 띠 2개 (③·④ 공용)',
-  zones:[{x:0,w:109,fill:COL.sea,name:'얕은 바다',ink:'#0E2240'}],
-  areas:[{id:'base',name:'출발',x:2,y:5,w:24,h:20,stroke:'#FFFFFF'},
-         {id:'warn',name:'경고 구역',x:80,y:5,w:10,h:20,fill:'#F6D57A',stroke:'#C99A1E',desc:'고래 앞 10 cm. 로봇 앞부분이 이 안에서 멈추고 경고(소리·빛). 고래에 닿으면 실패.'}],
-  props:[{id:'line',name:'항로선',kind:'tape',x:26,y:14,w:54,h:2,z:0,color:'#111111',mat:'검정 절연테이프 19 mm'},
-         {id:'shipwhale',name:'항로 고래 (세움)',kind:'stand',x:90,y:7,w:2,h:16,z:14,color:'#5B7FA6',mat:'우드락 10T 실루엣 16×14 cm + 받침 2'}],
-  goal:'로봇 배 · 고래 앞 10 cm 안 멈춤 + 경고',ok:'경고 구역 안 정지 · 고래 접촉 시 실패',sensor:'거리 센서 · 소리/빛',
-  path:[[14,15],[72,15]],lbl:[50,24]},
- {n:4,name:'고래 낙하',W:109,H:39,paper:'하늘 띠 + 베이지·남색 조각 30×39',
-  zones:[{x:0,w:30,fill:COL.sand,name:'해변',ink:'#0E2240'},{x:30,w:49,fill:COL.sea,name:'얕은 바다',ink:'#0E2240'},{x:79,w:30,fill:COL.deep,name:'심해',ink:'#F6D57A'}],
-  areas:[{id:'base',name:'출발',x:2,y:9.5,w:24,h:20,stroke:'#FFFFFF'},
-         {id:'drop',name:'낙하 구역',x:82,y:4,w:25,h:29,stroke:'#FFFFFF',desc:'좌초 고래 몸 전체가 선 안에 들어오면 성공. 판 밖으로 밀려나면 실패.'}],
-  props:[{id:'strand',name:'좌초 고래',kind:'whale',x:28,y:14.5,w:24,h:10,z:6,color:'#7A93B5',mat:'우드락 상자 24×10×6 cm, 가볍게'}],
-  goal:'좌초 고래 · 심해 낙하 구역까지 밀기',ok:'고래 몸 전체가 낙하 구역 안',sensor:'모터 이동 · 거리/힘 센서(선택)',
-  path:[[14,19.5],[72,19.5]],lbl:[66,8]}
+/* ===== 경기장 데이터 (단위 cm, 원점 왼쪽 위) ===== */
+const F={W:180,H:90,wall:5};
+const ZONES=[
+  {id:'beach',name:'해변',x:0,w:50,fill:'#EAD9B0',ink:'#0E2240'},
+  {id:'shallow',name:'얕은 바다',x:50,w:80,fill:'#9ADCD9',ink:'#0E2240'},
+  {id:'deep',name:'심해',x:130,w:50,fill:'#0E2240',ink:'#F6D57A'}
 ];
+const MC={1:'#E0574A',2:'#C99A1E',3:'#2A9C9C',4:'#3B6FD8'};
+const AREAS=[
+  {id:'base',name:'출발 구역',m:0,x:5,y:35,w:30,h:53,stroke:'#FFFFFF',desc:'모든 미션 출발. 로봇 전체가 선 안에서 시작.'},
+  {id:'collect',name:'① 수거 구역',m:1,x:5,y:5,w:30,h:23,stroke:'#E0574A',desc:'쓰레기 블록이 선 안에 들어오면 성공.'},
+  {id:'warn',name:'③ 경고 구역',m:3,x:95,y:70,w:10,h:16,fill:'#F6D57A',stroke:'#C99A1E',desc:'고래 앞 10 cm. 로봇 앞부분이 이 안에서 멈추고 경고(소리·빛).'},
+  {id:'drop',name:'④ 낙하 구역',m:4,x:135,y:35,w:40,h:27,stroke:'#F6D57A',desc:'좌초 고래 몸 전체가 선 안에 들어오면 성공.'}
+];
+const PROPS=[
+  {id:'cube1',name:'쓰레기 블록 (빨강)',m:1,kind:'cube',x:67.5,y:12.5,w:5,h:5,z:5,color:'#E0574A',mat:'원목 큐브 5 cm'},
+  {id:'cube2',name:'쓰레기 블록 (노랑)',m:1,kind:'cube',x:89.5,y:7.5,w:5,h:5,z:5,color:'#F6C343',mat:'원목 큐브 5 cm'},
+  {id:'cube3',name:'쓰레기 블록 (파랑)',m:1,kind:'cube',x:109.5,y:17.5,w:5,h:5,z:5,color:'#3B6FD8',mat:'원목 큐브 5 cm'},
+  {id:'netwhale',name:'그물 고래',m:2,kind:'whale',x:140,y:8,w:26,h:12,z:4,color:'#5B7FA6',mat:'우드락 10T 고래판 + 환봉 + 고리'},
+  {id:'post',name:'그물 기둥 + 고리',m:2,kind:'post',x:152.5,y:13.5,w:1,h:1,z:12,color:'#8B5A2B',mat:'환봉 Ø10 mm, 노출 12 cm · 고리 Ø8~10 cm'},
+  {id:'line',name:'③ 항로선',m:3,kind:'tape',x:35,y:77,w:60,h:2,z:0,color:'#111111',mat:'검정 절연테이프 19 mm'},
+  {id:'shipwhale',name:'항로 고래 (세움)',m:3,kind:'stand',x:105,y:70,w:2,h:16,z:14,color:'#5B7FA6',mat:'우드락 10T 실루엣 16×14 cm + 받침'},
+  {id:'strand',name:'좌초 고래',m:4,kind:'whale',x:40,y:42,w:24,h:10,z:6,color:'#7A93B5',mat:'우드락 상자 24×10×6 cm, 가볍게'}
+];
+const MISSIONS=[
+  {n:1,name:'바다 쓰레기',goal:'색깔 블록 3개 · 수거 구역으로',ok:'블록이 수거 구역 선 안',path:[[20,47],[20,33],[70,33],[70,27],[70,33],[24,33],[24,18]],sensor:'컬러 센서 · 팔 모터'},
+  {n:2,name:'어업 그물',goal:'고래 기둥의 고리 빼내기',ok:'고리가 기둥에서 완전히 빠짐',path:[[20,47],[20,33],[153,33],[153,30],[153,42]],sensor:'팔 모터 (갈고리)'},
+  {n:3,name:'선박 충돌',goal:'로봇 배 · 고래 앞 10 cm 안 멈춤 + 경고',ok:'경고 구역 안 정지 · 고래 접촉 시 실패',path:[[20,78],[87,78]],sensor:'거리 센서 · 소리/빛'},
+  {n:4,name:'고래 낙하',goal:'좌초 고래 · 심해 낙하 구역까지 밀기',ok:'고래 몸 전체가 낙하 구역 안',path:[[20,47],[130,47]],sensor:'모터 이동 · 힘 센서(선택)'}
+];
+const ROBOT={w:16,l:20,h:12};
 
-/* ===== 2D ===== */
-function whalePath(x,y,w,h){const bx=x+w*0.18,bw=w*0.82,cy=y+h/2;
-  return `M${bx},${cy} C${bx+bw*0.05},${y} ${x+w*0.8},${y} ${x+w},${cy} C${x+w*0.8},${y+h} ${bx+bw*0.05},${y+h} ${bx},${cy} Z M${bx+0.5},${cy} L${x},${y+h*0.1} L${x+w*0.06},${cy} L${x},${y+h*0.9} Z`;}
-function boardSVG(b,o={}){
-  const pad=o.dim?11:2, VW=b.W+pad*2, VH=b.H+pad*2;
-  let s=`<svg viewBox="${-pad} ${-pad} ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans KR, Noto Sans CJK KR, Malgun Gothic, sans-serif">`;
-  s+=`<defs><marker id="ar${b.n}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>`;
-  s+=`<pattern id="hatch${b.n}" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1" height="2" fill="#C99A1E" opacity=".5"/></pattern></defs>`;
-  b.zones.forEach(z=>{s+=`<rect x="${z.x}" y="0" width="${z.w}" height="${b.H}" fill="${z.fill}"/>`;});
-  if(b.zones.length>1)b.zones.forEach(z=>{s+=`<text x="${z.x+z.w/2}" y="${b.H-2}" text-anchor="middle" font-size="3.6" font-weight="700" fill="${z.ink}" opacity=".8">${z.name}</text>`;});
-  if(o.grid){for(let i=5;i<b.W;i+=5)s+=`<line x1="${i}" y1="0" x2="${i}" y2="${b.H}" stroke="#000" stroke-opacity="${i%10?.04:.09}" stroke-width=".2"/>`;
-    for(let j=5;j<b.H;j+=5)s+=`<line x1="0" y1="${j}" x2="${b.W}" y2="${j}" stroke="#000" stroke-opacity="${j%10?.04:.09}" stroke-width=".2"/>`;}
-  b.areas.forEach(a=>{const sel=o.selected===a.id?'sel':'';const dark=b.zones.find(z=>a.x>=z.x&&a.x<z.x+z.w)?.fill===COL.deep;
-    if(a.fill)s+=`<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="${a.fill}"/>`;
-    s+=`<g class="hit" data-id="${a.id}"><rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="${a.fill?`url(#hatch${b.n})`:'#fff'}" fill-opacity="${a.fill?1:0.001}" stroke="${a.stroke}" stroke-width=".7" stroke-dasharray="${a.id==='base'?'':'2 1.2'}" class="${sel}"/>`;
-    s+=`<text x="${a.x+1.5}" y="${a.id==='base'||a.id==='warn'?a.y-1.2:a.y+4}" font-size="3.2" font-weight="700" fill="${dark?'#FFFFFF':'#0E2240'}">${a.name}</text></g>`;});
-  b.props.forEach(p=>{const sel=o.selected===p.id?'sel':'';s+=`<g class="hit" data-id="${p.id}">`;
-    if(p.kind==='cube')s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx=".6" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/>`;
-    if(p.kind==='whale')s+=`<path d="${whalePath(p.x,p.y,p.w,p.h)}" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/><circle cx="${p.x+p.w*0.86}" cy="${p.y+p.h*0.38}" r=".7" fill="#fff"/>`;
-    if(p.kind==='post')s+=`<circle cx="${p.x+.5}" cy="${p.y+.5}" r="4.5" fill="none" stroke="#F08A6C" stroke-width="1.2"/><circle cx="${p.x+.5}" cy="${p.y+.5}" r="1" fill="${p.color}" stroke="#fff" stroke-width=".3" class="${sel}"/>`;
-    if(p.kind==='tape')s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="${p.color}" class="${sel}"/>`;
-    if(p.kind==='stand')s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/><path d="M${p.x+2},${p.y+2} l4,-1.5 v3 z M${p.x+2},${p.y+p.h-2} l4,-1.5 v3 z" fill="#8B5A2B"/>`;
+/* ===== 2D 도형 ===== */
+function whalePath(x,y,w,h){ // 위에서 본 고래: 몸통 + 꼬리(왼쪽)
+  const bx=x+w*0.18, bw=w*0.82, cy=y+h/2;
+  return `M${bx},${cy} C${bx+bw*0.05},${y} ${x+w*0.8},${y} ${x+w},${cy} C${x+w*0.8},${y+h} ${bx+bw*0.05},${y+h} ${bx},${cy} Z `+
+         `M${bx+0.5},${cy} L${x},${y+h*0.1} L${x+w*0.06},${cy} L${x},${y+h*0.9} Z`;
+}
+function svgEl(o){ // o: {grid,dim,paths,selected,scale}
+  const pad=o.dim?14:4, VW=F.W+pad*2, VH=F.H+pad*2+(o.dim?6:0);
+  let s=`<svg viewBox="${-pad} ${-pad} ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans KR, Noto Sans CJK KR, sans-serif">`;
+  s+=`<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>`;
+  s+=`<pattern id="hatch" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1" height="2" fill="#C99A1E" opacity=".5"/></pattern></defs>`;
+  if(o.dim) s+=`<rect x="${-F.wall}" y="${-F.wall}" width="${F.W+F.wall*2}" height="${F.H+F.wall*2}" rx="1.5" fill="#B9AE98"/>`;
+  ZONES.forEach(z=>{s+=`<rect x="${z.x}" y="0" width="${z.w}" height="${F.H}" fill="${z.fill}"/>`;
+    s+=`<text x="${z.id==='beach'?37:z.x+3}" y="${F.H-3.5}" font-size="5" font-weight="700" fill="${z.ink}" opacity=".85">${z.name}</text>`;});
+  if(o.grid){for(let i=10;i<F.W;i+=10)s+=`<line x1="${i}" y1="0" x2="${i}" y2="${F.H}" stroke="#000" stroke-opacity=".08" stroke-width=".2"/>`;
+    for(let j=10;j<F.H;j+=10)s+=`<line x1="0" y1="${j}" x2="${F.W}" y2="${j}" stroke="#000" stroke-opacity=".08" stroke-width=".2"/>`;}
+  AREAS.forEach(a=>{const fill=a.fill?(a.id==='warn'?'url(#hatch)':a.fill):'none';
+    if(a.fill) s+=`<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="${a.fill}" opacity=".9"/>`;
+    s+=`<g class="hit" data-id="${a.id}"><rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="${fill}" fill-opacity="${a.fill?1:0.001}" stroke="${a.stroke}" stroke-width=".7" stroke-dasharray="${a.id==='base'?'':'2 1.2'}" class="${o.selected===a.id?'sel':''}"/>`;
+    const lx=a.id==='warn'?a.x+a.w/2:a.x+1.8, ly=a.id==='warn'?a.y-1.6:a.id==='base'?a.y+3.8:a.y+4.6, anc=a.id==='warn'?'middle':'start';
+    const ink=a.id==='drop'?'#F6D57A':'#0E2240';
+    s+=`<text x="${lx}" y="${ly}" text-anchor="${anc}" font-size="3.4" font-weight="700" fill="${ink}">${a.name}</text></g>`;});
+  PROPS.forEach(p=>{const sel=o.selected===p.id?'sel':'';
+    s+=`<g class="hit" data-id="${p.id}">`;
+    if(p.kind==='cube') s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx=".6" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/>`;
+    if(p.kind==='whale') s+=`<path d="${whalePath(p.x,p.y,p.w,p.h)}" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/><circle cx="${p.x+p.w*0.86}" cy="${p.y+p.h*0.38}" r=".7" fill="#fff"/>`;
+    if(p.kind==='post') s+=`<circle cx="${p.x+.5}" cy="${p.y+.5}" r="4.5" fill="none" stroke="#F08A6C" stroke-width="1.2"/><circle cx="${p.x+.5}" cy="${p.y+.5}" r="1" fill="${p.color}" stroke="#fff" stroke-width=".3" class="${sel}"/>`;
+    if(p.kind==='tape') s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="${p.color}" class="${sel}"/>`;
+    if(p.kind==='stand') s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="${p.color}" stroke="#0E2240" stroke-width=".35" class="${sel}"/><path d="M${p.x+2},${p.y+3} l4,-2 v4 z M${p.x+2},${p.y+p.h-3} l4,-2 v4 z" fill="#8B5A2B"/>`;
     s+=`</g>`;});
-  if(o.path){const pts=(b.ov||b.path).map(p=>p.join(',')).join(' ');
-    s+=`<polyline points="${pts}" fill="none" stroke="${MC[b.n]}" stroke-width="1.2" stroke-linejoin="round" marker-end="url(#ar${b.n})"/>`;
-    const [sx,sy]=b.path[0];
-    s+=`<rect x="${sx-ROBOT.l/2}" y="${sy-ROBOT.w/2}" width="${ROBOT.l}" height="${ROBOT.w}" rx="1.5" fill="#fff" fill-opacity=".55" stroke="#0E2240" stroke-width=".4" stroke-dasharray="1 .8"/><text x="${sx}" y="${sy+1.1}" text-anchor="middle" font-size="2.8" font-weight="700" fill="#0E2240">로봇</text>`;
-    s+=`<circle cx="${b.lbl[0]}" cy="${b.lbl[1]}" r="3.4" fill="${MC[b.n]}" stroke="#fff" stroke-width=".5"/><text x="${b.lbl[0]}" y="${b.lbl[1]+1.5}" text-anchor="middle" font-size="4.2" font-weight="700" fill="#fff">${b.n}</text>`;}
-  if(o.dim){const dc='#4A5A6E';
-    s+=`<line x1="0" y1="-5" x2="${b.W}" y2="-5" stroke="${dc}" stroke-width=".3" marker-start="url(#ar${b.n})" marker-end="url(#ar${b.n})"/><text x="${b.W/2}" y="-6.3" text-anchor="middle" font-size="3.2" fill="${dc}" font-family="IBM Plex Mono, monospace">${b.W} cm</text>`;
-    s+=`<line x1="-5" y1="0" x2="-5" y2="${b.H}" stroke="${dc}" stroke-width=".3" marker-start="url(#ar${b.n})" marker-end="url(#ar${b.n})"/><text transform="translate(-6.5,${b.H/2}) rotate(-90)" text-anchor="middle" font-size="3.2" fill="${dc}" font-family="IBM Plex Mono, monospace">${b.H} cm</text>`;
-    if(b.zones.length>1)b.zones.forEach(z=>{s+=`<line x1="${z.x}" y1="${b.H+5}" x2="${z.x+z.w}" y2="${b.H+5}" stroke="${dc}" stroke-width=".3" marker-start="url(#ar${b.n})" marker-end="url(#ar${b.n})"/><text x="${z.x+z.w/2}" y="${b.H+9.3}" text-anchor="middle" font-size="3" fill="${dc}" font-family="IBM Plex Mono, monospace">${z.w}</text>`;});}
+  if(o.paths){o.paths.forEach(n=>{const m=MISSIONS[n-1];const dy={1:-2,2:2,3:0,4:0}[n];const pts=m.path.map((p,i)=>[p[0],(p[1]===33||(p[1]===47&&n===4))?p[1]+dy:p[1]].join(',')).join(' ');
+      s+=`<polyline points="${pts}" fill="none" stroke="${MC[n]}" stroke-width="1.3" stroke-linejoin="round" stroke-dasharray="${n===2||n===1?'3 1.5':''}" marker-end="url(#ar)" opacity=".95"/>`;
+      const [ex,ey]=m.path[m.path.length-1];
+      s+=`<circle cx="${m.path[0][0]}" cy="${m.path[0][1]}" r="1.4" fill="${MC[n]}"/>`;
+      const lb=[[88,28],[140,28],[60,74],[110,43]][n-1];
+      s+=`<g><circle cx="${lb[0]}" cy="${lb[1]}" r="3.3" fill="${MC[n]}" stroke="#fff" stroke-width=".5"/><text x="${lb[0]}" y="${lb[1]+1.5}" text-anchor="middle" font-size="4.2" font-weight="700" fill="#fff">${n}</text></g>`;});
+    // 로봇 그림자
+    s+=`<rect x="${20-ROBOT.l/2}" y="${47-ROBOT.w/2}" width="${ROBOT.l}" height="${ROBOT.w}" rx="1.5" fill="#FFFFFF" fill-opacity=".55" stroke="#0E2240" stroke-width=".4" stroke-dasharray="1 .8"/>`;
+    s+=`<text x="20" y="${47+1.2}" text-anchor="middle" font-size="2.8" font-weight="700" fill="#0E2240">로봇</text>`;
+  }
+  if(o.dim){const dc='#4A5A6E', fs=3.2;
+    const hd=(x1,x2,y,t)=>`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${dc}" stroke-width=".3" marker-start="url(#ar)" marker-end="url(#ar)"/><text x="${(x1+x2)/2}" y="${y-1}" text-anchor="middle" font-size="${fs}" fill="${dc}" font-family="IBM Plex Mono, monospace">${t}</text>`;
+    s+=hd(0,F.W,-8.5,'180 cm');
+    ZONES.forEach(z=>{s+=hd(z.x,z.x+z.w,F.H+F.wall+6,z.w+' cm');});
+    s+=`<line x1="-8.5" y1="0" x2="-8.5" y2="${F.H}" stroke="${dc}" stroke-width=".3" marker-start="url(#ar)" marker-end="url(#ar)"/><text transform="translate(-10,${F.H/2}) rotate(-90)" text-anchor="middle" font-size="${fs}" fill="${dc}" font-family="IBM Plex Mono, monospace">90 cm</text>`;}
   return s+`</svg>`;
 }
-const CIR='①②③④';
 
 /* ===== 평면도 ===== */
-let cur=0,opt={grid:true,dim:true,selected:null};
-const planBtns=document.getElementById('planBtns');
-planBtns.innerHTML=BOARDS.map((b,i)=>`<button class="mbtn m${b.n}" data-i="${i}" aria-pressed="${i===0}">${CIR[i]} ${b.name} · ${b.W}×${b.H}</button>`).join('');
-planBtns.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{cur=+btn.dataset.i;opt.selected=null;planBtns.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===btn));renderPlan();});
-function renderPlan(){const b=BOARDS[cur];const box=document.getElementById('planBox');box.innerHTML=boardSVG(b,opt);
-  box.querySelectorAll('.hit').forEach(g=>g.addEventListener('click',()=>{opt.selected=opt.selected===g.dataset.id?null:g.dataset.id;renderPlan();}));
-  showInfo();
-  document.getElementById('coordTitle').textContent=`배치 좌표표 · ${CIR[cur]} ${b.name}`;
-  document.getElementById('coordTable').innerHTML='<thead><tr><th>항목</th><th>X</th><th>Y</th><th>크기 (가로×세로×높이)</th><th>재료</th></tr></thead><tbody>'+
-   [{name:'판',x:0,y:0,w:b.W,h:b.H,mat:b.paper},...b.areas,...b.props].map(it=>`<tr><td>${it.name}</td><td class="num">${it.x}</td><td class="num">${it.y}</td><td class="num">${it.w} × ${it.h}${it.z?' × '+it.z:''}</td><td>${it.mat||(it.id?'흰 테이프':'')}</td></tr>`).join('')+'</tbody>';}
-function showInfo(){const b=BOARDS[cur];const info=document.getElementById('info');const it=[...b.areas,...b.props].find(x=>x.id===opt.selected);
-  if(!it){info.innerHTML=`<h2>${CIR[cur]} ${b.name}</h2><dl class="kv"><dt>판</dt><dd class="mono">${b.W} × ${b.H} cm</dd><dt>전지</dt><dd>${b.paper}</dd><dt>목표</dt><dd>${b.goal}</dd><dt>성공</dt><dd>${b.ok}</dd><dt>주로 쓰는 것</dt><dd>${b.sensor}</dd></dl><p class="note">출발 구역 24×20 cm · 로봇 전체가 선 안에서 시작.</p>`;return;}
-  info.innerHTML=`<h2>${it.name}</h2><dl class="kv"><dt>위치 X</dt><dd class="mono">${it.x} cm</dd><dt>위치 Y</dt><dd class="mono">${it.y} cm</dd><dt>크기</dt><dd class="mono">${it.w} × ${it.h} cm${it.z?` · 높이 ${it.z} cm`:''}</dd>${it.mat?`<dt>재료</dt><dd>${it.mat}</dd>`:''}</dl>${it.desc?`<p class="note">${it.desc}</p>`:''}<button id="clr" style="margin-top:8px">선택 해제</button>`;
-  document.getElementById('clr').onclick=()=>{opt.selected=null;renderPlan();};}
+let opt={grid:true,dim:true,selected:null};
+const planBox=document.getElementById('planBox'), info=document.getElementById('info'), infoDefault=info.innerHTML;
+function renderPlan(){planBox.innerHTML=svgEl({...opt});
+  planBox.querySelectorAll('.hit').forEach(g=>g.addEventListener('click',()=>{opt.selected=opt.selected===g.dataset.id?null:g.dataset.id;renderPlan();showInfo();}));}
+function showInfo(){const id=opt.selected; if(!id){info.innerHTML=infoDefault;return;}
+  const it=[...AREAS,...PROPS].find(x=>x.id===id);
+  const mm=it.m?MISSIONS[it.m-1]:null;
+  info.innerHTML=`<h2>${it.name}</h2><dl class="kv">
+    <dt>위치 X</dt><dd>${it.x} cm</dd><dt>위치 Y</dt><dd>${it.y} cm</dd>
+    <dt>크기</dt><dd>${it.w} × ${it.h} cm${it.z?` · 높이 ${it.z} cm`:''}</dd>
+    ${it.mat?`<dt>재료</dt><dd style="font-family:var(--font-body)">${it.mat}</dd>`:''}
+    ${mm?`<dt>미션</dt><dd style="font-family:var(--font-body)">${'①②③④'[mm.n-1]} ${mm.name}</dd>`:''}
+  </dl>${it.desc?`<p class="note">${it.desc}</p>`:''}<button id="clr" style="margin-top:8px">선택 해제</button>`;
+  document.getElementById('clr').onclick=()=>{opt.selected=null;renderPlan();showInfo();};}
 document.getElementById('tgDim').onclick=e=>{opt.dim=!opt.dim;e.currentTarget.setAttribute('aria-pressed',opt.dim);renderPlan();};
 document.getElementById('tgGrid').onclick=e=>{opt.grid=!opt.grid;e.currentTarget.setAttribute('aria-pressed',opt.grid);renderPlan();};
+document.getElementById('coordTable').innerHTML='<thead><tr><th>미션</th><th>항목</th><th>X</th><th>Y</th><th>크기 (가로×세로×높이)</th></tr></thead><tbody>'+
+  [...AREAS,...PROPS].sort((a,b)=>a.m-b.m).map(it=>`<tr><td>${it.m?'①②③④'[it.m-1]:'공통'}</td><td>${it.name.replace(/^[①②③④] /,'')}</td><td class="num">${it.x}</td><td class="num">${it.y}</td><td class="num">${it.w} × ${it.h}${it.z?' × '+it.z:''}</td></tr>`).join('')+'</tbody>';
 renderPlan();
 
 /* ===== 개요도 ===== */
-document.getElementById('ovGrid').innerHTML=BOARDS.map(b=>`<div class="ovcard m${b.n}"><span class="tag">미션 ${CIR[b.n-1]} · ${b.W}×${b.H} cm</span><h3>${b.name}</h3>${boardSVG(b,{path:true})}<p>${b.goal}</p><p><b>성공</b> ${b.ok}</p><p><b>주로 쓰는 것</b> ${b.sensor}</p></div>`).join('');
+let ovSel=[1,2,3,4];
+const ovBtns=document.getElementById('ovBtns');
+ovBtns.innerHTML=MISSIONS.map(m=>`<button class="mbtn m${m.n}" data-n="${m.n}" aria-pressed="true">${'①②③④'[m.n-1]} ${m.name}</button>`).join('');
+ovBtns.querySelectorAll('button').forEach(b=>b.onclick=()=>{const n=+b.dataset.n;ovSel=ovSel.includes(n)?ovSel.filter(x=>x!==n):[...ovSel,n].sort();b.setAttribute('aria-pressed',ovSel.includes(n));renderOv();});
+function renderOv(){document.getElementById('ovBox').innerHTML=svgEl({grid:false,dim:false,paths:ovSel});}
+document.getElementById('ovCards').innerHTML=MISSIONS.map(m=>`<div class="mcard m${m.n}"><span class="tag">미션 ${'①②③④'[m.n-1]}</span><h3>${m.name}</h3><p>${m.goal}</p><p><b style="color:var(--fg)">성공</b> ${m.ok}</p><p><b style="color:var(--fg)">주로 쓰는 것</b> ${m.sensor}</p></div>`).join('');
+renderOv();
 
 /* ===== 준비물 ===== */
-function cutSVG(kind){ // 전지 78.8 x 109.1 (세로)
-  const W=78.8,H=109.1;let s=`<svg viewBox="-2 -2 ${W+4} ${H+4}" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans KR, sans-serif">`;
-  const bg={sky:COL.sea,navy:COL.deep,beige:COL.sand}[kind.c];const ink=kind.c==='navy'?'#F6D57A':'#0E2240';
-  s+=`<rect x="0" y="0" width="${W}" height="${H}" fill="${bg}" opacity=".35" stroke="#4A5A6E" stroke-width=".4"/>`;
-  kind.r.forEach(([x,y,w,h,t])=>{s+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${bg}" stroke="${ink}" stroke-width=".6" stroke-dasharray="2 1"/><text x="${x+w/2}" y="${y+h/2+1.6}" text-anchor="middle" font-size="5" font-weight="700" fill="${ink}">${t}</text>`;});
-  return s+`</svg>`;}
-const CUTS=[
- {t:'하늘 · ① 판',d:'60×60 1판',c:'sky',r:[[0,0,60,60,'① 60×60']]},
- {t:'하늘 · ③④ 띠',d:'109×39 띠 2개 (③은 30 폭으로)',c:'sky',r:[[0,0,39.4,109.1,'③ / ④'],[39.4,0,39.4,109.1,'③ / ④']]},
- {t:'남색 · ② 판',d:'반으로 잘라 60×45 2판',c:'navy',r:[[0,0,60,45,'② 60×45'],[0,54.55,60,45,'② 60×45']]},
- {t:'남색 · ④ 심해 조각',d:'30×39 조각 6개',c:'navy',r:[[0,0,39,30,'심해'],[39,0,39,30,'심해'],[0,30,39,30,'심해'],[39,30,39,30,'심해'],[0,60,39,30,'심해'],[39,60,39,30,'심해']]},
- {t:'베이지 · ④ 해변 조각',d:'30×39 조각 6개',c:'beige',r:[[0,0,39,30,'해변'],[39,0,39,30,'해변'],[0,30,39,30,'해변'],[39,30,39,30,'해변'],[0,60,39,30,'해변'],[39,60,39,30,'해변']]}
+const MATS=[ // [구분, 품목, 규격, 1세트 수량, 단위, 용도, perSet(true면 세트 수 곱)]
+  ['바닥 A','현수막 출력','180×90 cm, 도안 1:1',1,'장','경기장 바닥',true],
+  ['바닥 B','우드락 5T (흰색)','900×600 mm',3,'장','구역별 바닥 (A 선택 시 불필요)',true],
+  ['바닥 B','색 시트지 또는 색 전지','베이지·하늘·남색',3,'장','해변·얕은 바다·심해 색',true],
+  ['공통','우드락 10T','900×600 mm',2,'장','경계벽 띠 5 cm 10줄 + 고래 소품',true],
+  ['공통','검정 절연테이프','19 mm',1,'롤','③ 항로선 60 cm, 구역 경계',false],
+  ['공통','노랑 절연테이프 또는 노랑 색지','19 mm / A4',1,'개','③ 경고 구역 10×16 cm',false],
+  ['공통','흰 절연테이프','19 mm',1,'롤','출발·수거·낙하 구역 (바닥 B)',false],
+  ['① 쓰레기','원목 큐브','5 cm, 빨강·노랑·파랑',3,'개','쓰레기 블록 (+여분 권장)',true],
+  ['② 그물','나무 환봉','Ø10 mm × 15 cm',1,'개','그물 기둥 (노출 12 cm)',true],
+  ['② 그물','고리','Ø8~10 cm (고무링·링 던지기 고리)',2,'개','그물 고리 1 + 여분 1',true],
+  ['③ 선박','받침용 삼각 지지대','우드락 자투리',2,'개','항로 고래 세우기',true],
+  ['④ 고래','좌초 고래 상자','24×10×6 cm 우드락 상자',1,'개','로봇이 밀 수 있게 가볍게',true],
+  ['소품','고래 그림 출력','A4 컬러',1,'장','고래 소품 3종 겉면',true],
+  ['도구','양면테이프 (폼)','—',1,'롤','바닥·소품 고정',false],
+  ['도구','글루건 + 심','—',1,'세트','우드락 조립',false],
+  ['도구','커터칼 · 철자 · 커팅매트','—',1,'세트','우드락 재단',false],
+  ['도구','줄자','3 m',1,'개','배치 · ③ 10 cm 판정',true],
 ];
-document.getElementById('cuts').innerHTML=CUTS.map(c=>`<div class="cut">${cutSVG(c)}<b>${c.t}</b><span>${c.d}</span></div>`).join('');
-const ids=['teams','n1','n2','n3','n4'];
-function v(id){const el=document.getElementById(id);let x=parseInt(el.value);if(isNaN(x)||x<0)x=0;return x;}
-function renderMats(){const T=v('teams'),n=[v('n1'),v('n2'),v('n3'),v('n4')],tot=n.reduce((a,b)=>a+b,0);
-  const C=Math.ceil;
-  const sky=n[0]+C((n[2]+n[3])/2), navy=C(n[1]/2)+C(n[3]/6), beige=C(n[3]/6), wood=C((n[1]+n[2]+n[3])/4);
-  document.getElementById('stat').innerHTML=`<span>판 ${tot}개</span><span>판당 약 ${tot?(T/tot).toFixed(1):'-'}팀</span><span>전지 ${sky+navy+beige}장 + 예비 2</span>`;
-  const R=[ // [구분, 품목, 규격, 수량, 단위, 용도]
-   ['전지','하늘 전지','788×1091 mm',sky,'장',`① ${n[0]}판 · ③④ 띠`],
-   ['전지','남색 전지','788×1091 mm',navy,'장','② 판 · ④ 심해 조각'],
-   ['전지','베이지 전지','788×1091 mm',beige,'장','④ 해변 조각'],
-   ['전지','예비 전지','아무 색',2,'장','실수 대비'],
-   ['①','원목 큐브 5 cm','빨강·노랑·파랑',n[0]*3+2,'개','쓰레기 블록 (판당 3 + 예비 2)'],
-   ['②','우드락 고래판','26×12 cm',n[1],'개','그물 고래'],
-   ['②','나무 환봉','Ø10 mm × 15 cm',n[1],'개','그물 기둥'],
-   ['②','고리','Ø8~10 cm (고무링 등)',n[1]*2,'개','그물 고리 + 예비'],
-   ['③','검정 절연테이프','19 mm',n[2]?1:0,'롤','항로선 판당 54 cm'],
-   ['③','노랑 색지','A4',n[2],'장','경고 구역 10×20 cm'],
-   ['③','항로 고래 세움판','우드락 16×14 cm + 받침 2',n[2],'세트','거리 센서 대상'],
-   ['④','좌초 고래 상자','우드락 24×10×6 cm',n[3]+1,'개','판당 1 + 예비 1'],
-   ['공통','우드락 10T','900×600 mm',wood,'장','고래 소품 3종 재료'],
-   ['공통','흰 절연테이프','19 mm',C(tot/4),'롤','출발·수거·낙하 구역 선'],
-   ['공통','투명 박스테이프','48 mm',C(tot/4),'롤','판 네 변 바닥 고정'],
-   ['공통','미션 표지','A4 출력',tot,'장','판마다 미션 이름·성공 기준'],
-   ['공통','줄자','3 m',C(tot/2),'개','배치 · ③ 10 cm 판정'],
-   ['도구','글루건 · 커터칼 · 철자 · 커팅매트','—',1,'세트','소품 제작'],
-  ].filter(r=>r[3]>0);
-  document.getElementById('matTable').innerHTML='<thead><tr><th>구분</th><th>품목</th><th>규격</th><th>수량</th><th>용도</th></tr></thead><tbody>'+
-   R.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td><td class="num"><b>${r[3]}</b> ${r[4]}</td><td>${r[5]}</td></tr>`).join('')+'</tbody>';}
-ids.forEach(id=>document.getElementById(id).addEventListener('input',renderMats));renderMats();
+const setsIn=document.getElementById('sets');
+function renderMats(){let n=Math.max(1,Math.min(20,parseInt(setsIn.value)||1));setsIn.value=n;
+  document.getElementById('matTable').innerHTML='<thead><tr><th>구분</th><th>품목</th><th>규격</th><th>1세트</th><th>합계</th><th>용도</th></tr></thead><tbody>'+
+   MATS.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td><td class="num">${r[3]} ${r[4]}</td><td class="num"><b>${r[6]?r[3]*n:r[3]+(n>2?'~'+Math.ceil(n/2):'')}</b> ${r[4]}</td><td>${r[5]}</td></tr>`).join('')+'</tbody>';}
+setsIn.addEventListener('input',renderMats);
+document.getElementById('sMinus').onclick=()=>{setsIn.value=(+setsIn.value||1)-1;renderMats();};
+document.getElementById('sPlus').onclick=()=>{setsIn.value=(+setsIn.value||1)+1;renderMats();};
+renderMats();
 
-/* ===== 탭 ===== */
+/* ===== 탭 전환 ===== */
 const VIEWS=['plan','overview','view3d','materials'];
 function route(){const v=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'plan';
   VIEWS.forEach(x=>document.getElementById('v-'+x).hidden=x!==v);
+  document.querySelectorAll('nav a').forEach(a=>a.toggleAttribute('aria-current',a.getAttribute('href')==='#'+v)||a.setAttribute('aria-current','page'));
   document.querySelectorAll('nav a').forEach(a=>{if(a.getAttribute('href')==='#'+v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
-  if(v==='view3d')window.dispatchEvent(new Event('show3d'));}
-window.addEventListener('hashchange',route);route();
-window.FIELD={BOARDS,ROBOT,MC,COL,boardSVG};
+  if(v==='view3d') window.dispatchEvent(new Event('show3d'));}
+window.addEventListener('hashchange',route); route();
+window.FIELD={F,ZONES,AREAS,PROPS,MISSIONS,ROBOT,MC,svgEl};
 </script>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-const {BOARDS,ROBOT}=window.FIELD;
-const OFF={1:[0,0],2:[78,7.5],3:[0,78],4:[0,126]}; // 판 배치(바닥 위, cm)
-const CX=69,CY=82;
-const box=document.getElementById('three');let inited=false,renderer,scene,camera,controls,robot,objs={},anim=null,blinkMat,cam=null;
-const P=(n,x,y)=>new THREE.Vector3(OFF[n][0]+x-CX,0,OFF[n][1]+y-CY);
-function mesh(geo,color){const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color,roughness:.85}));m.castShadow=true;m.receiveShadow=true;return m;}
+const {F,ZONES,AREAS,PROPS,MISSIONS,ROBOT,MC}=window.FIELD;
+const box=document.getElementById('three'); let inited=false, renderer, scene, camera, controls, robot, objs={}, anim=null, blinkMat;
+const P=(x,y)=>new THREE.Vector3(x-F.W/2,0,y-F.H/2); // 평면 좌표 → 3D
+function mesh(geo,color,opts={}){const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color,roughness:.8,...opts}));m.castShadow=true;m.receiveShadow=true;return m;}
 function whaleMesh(w,h,z,color){const g=new THREE.Group();
   const body=mesh(new THREE.SphereGeometry(1,32,16),color);body.scale.set(w*0.42,z/2,h/2);body.position.set(w*0.08,z/2,0);g.add(body);
   const tail=mesh(new THREE.ConeGeometry(h*0.45,w*0.25,3),color);tail.rotation.z=Math.PI/2;tail.position.set(-w*0.36,z*0.45,0);tail.scale.set(1,1,.35);g.add(tail);
   const eye=mesh(new THREE.SphereGeometry(.6,12,8),0xffffff);eye.position.set(w*0.4,z*0.65,h*0.3);g.add(eye);return g;}
-function flat(n,x,y,w,h,color,lift){const m=mesh(new THREE.BoxGeometry(w,.12,h),color);m.position.copy(P(n,x+w/2,y+h/2));m.position.y=lift;return m;}
 function init(){inited=true;
-  renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;box.appendChild(renderer.domElement);
+  renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;
+  box.appendChild(renderer.domElement);
   scene=new THREE.Scene();scene.background=new THREE.Color(0xCFE3E8);
-  camera=new THREE.PerspectiveCamera(38,1,1,3000);controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.05;
+  camera=new THREE.PerspectiveCamera(40,1,1,2000);
+  controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.05;
   scene.add(new THREE.HemisphereLight(0xffffff,0x7a8a99,1.1));
-  const sun=new THREE.DirectionalLight(0xffffff,1.5);sun.position.set(-80,200,120);sun.castShadow=true;sun.shadow.bias=-0.0008;sun.shadow.normalBias=0.4;Object.assign(sun.shadow.camera,{left:-150,right:150,top:150,bottom:-150});sun.shadow.mapSize.set(2048,2048);scene.add(sun);
-  const floor=mesh(new THREE.BoxGeometry(220,2,240),0xC8BBA4);floor.position.y=-1.1;scene.add(floor);
-  BOARDS.forEach(b=>{const n=b.n;
-    b.zones.forEach(z=>{scene.add(flat(n,z.x,0,z.w,b.H,z.fill,.06));});
-    b.areas.forEach(a=>{const c=a.id==='collect'?0xE0574A:0xffffff;
-      if(a.fill){scene.add(flat(n,a.x,a.y,a.w,a.h,0xF6D57A,.14));return;}
-      const t=.8;[[a.x,a.y,a.w,t],[a.x,a.y+a.h-t,a.w,t],[a.x,a.y,t,a.h],[a.x+a.w-t,a.y,t,a.h]].forEach(([x,y,w,h])=>scene.add(flat(n,x,y,w,h,c,.15)));});
-    b.props.forEach(p=>{let o;
-      if(p.kind==='cube'){o=mesh(new THREE.BoxGeometry(5,5,5),p.color);o.position.copy(P(n,p.x+2.5,p.y+2.5));o.position.y=2.6;}
-      if(p.kind==='tape'){o=flat(n,p.x,p.y,p.w,p.h,0x111111,.16);}
-      if(p.kind==='whale'){o=whaleMesh(p.w,p.h,p.z,p.color);o.position.copy(P(n,p.x+p.w/2,p.y+p.h/2));o.position.y=.1;}
-      if(p.kind==='post'){o=new THREE.Group();const c=mesh(new THREE.CylinderGeometry(.5,.5,12,16),0x8B5A2B);c.position.y=6;o.add(c);
-        const ring=mesh(new THREE.TorusGeometry(4.5,.5,10,32),0xF08A6C);ring.rotation.x=Math.PI/2;ring.position.y=4.6;o.add(ring);objs.ring=ring;o.position.copy(P(n,p.x+.5,p.y+.5));}
-      if(p.kind==='stand'){o=new THREE.Group();const s=new THREE.Shape();s.moveTo(0,0);s.bezierCurveTo(2,10,12,13,16,8);s.lineTo(16,0);s.lineTo(0,0);
-        const m=mesh(new THREE.ExtrudeGeometry(s,{depth:1,bevelEnabled:false}),p.color);m.rotation.y=Math.PI/2;m.position.set(-.5,0,8);o.add(m);
-        [-4,4].forEach(z=>{const leg=mesh(new THREE.BoxGeometry(5,4,1),0xC9A27A);leg.position.set(3,2,z);o.add(leg);});o.position.copy(P(n,p.x+1,p.y));}
-      o.userData.home=o.position.clone();o.userData.board=n;objs[p.id]=o;scene.add(o);});});
+  const sun=new THREE.DirectionalLight(0xffffff,1.6);sun.position.set(-60,160,90);sun.castShadow=true;
+  Object.assign(sun.shadow.camera,{left:-120,right:120,top:80,bottom:-80});sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+  // 책상
+  const desk=mesh(new THREE.BoxGeometry(F.W+40,4,F.H+40),0xC9B48F);desk.position.y=-2.6;scene.add(desk);
+  // 바닥 구역
+  ZONES.forEach(z=>{const m=mesh(new THREE.BoxGeometry(z.w,.6,F.H),z.fill);m.position.copy(P(z.x+z.w/2,F.H/2));m.position.y=-.3;scene.add(m);});
+  // 경계벽
+  const wc=0xF2EEE6;[[F.W/2,-F.wall/2+0,F.W+2*1,1],[F.W/2,F.H+.5,F.W+2,1]].forEach(([x,y,w])=>{const m=mesh(new THREE.BoxGeometry(w,5,1),wc);m.position.copy(P(x,y<0?-.5:F.H+.5));m.position.y=2.5;scene.add(m);});
+  [[-.5],[F.W+.5]].forEach(([x])=>{const m=mesh(new THREE.BoxGeometry(1,5,F.H+2),wc);m.position.copy(P(x,F.H/2));m.position.y=2.5;scene.add(m);});
+  // 구역 테두리
+  AREAS.forEach(a=>{const c=a.id==='base'?0xffffff:a.id==='drop'?0xF6D57A:a.id==='collect'?0xE0574A:0xF6D57A;
+    if(a.id==='warn'){const m=mesh(new THREE.BoxGeometry(a.w,.1,a.h),0xF6D57A);m.position.copy(P(a.x+a.w/2,a.y+a.h/2));m.position.y=.06;scene.add(m);return;}
+    const t=.8,segs=[[a.x+a.w/2,a.y,a.w,t],[a.x+a.w/2,a.y+a.h,a.w,t],[a.x,a.y+a.h/2,t,a.h],[a.x+a.w,a.y+a.h/2,t,a.h]];
+    segs.forEach(([x,y,w,h])=>{const m=mesh(new THREE.BoxGeometry(w,.1,h),c);m.position.copy(P(x,y));m.position.y=.06;scene.add(m);});});
+  // 소품
+  PROPS.forEach(p=>{let o;
+    if(p.kind==='cube'){o=mesh(new THREE.BoxGeometry(5,5,5),p.color);o.position.copy(P(p.x+2.5,p.y+2.5));o.position.y=2.5;}
+    if(p.kind==='tape'){o=mesh(new THREE.BoxGeometry(p.w,.12,p.h),0x111111);o.position.copy(P(p.x+p.w/2,p.y+p.h/2));o.position.y=.07;}
+    if(p.kind==='whale'){o=whaleMesh(p.w,p.h,p.z,p.color);o.position.copy(P(p.x+p.w/2,p.y+p.h/2));}
+    if(p.kind==='post'){o=new THREE.Group();const c=mesh(new THREE.CylinderGeometry(.5,.5,12,16),0x8B5A2B);c.position.y=6;o.add(c);
+      const ring=mesh(new THREE.TorusGeometry(4.5,.5,10,32),0xF08A6C);ring.rotation.x=Math.PI/2;ring.position.y=3.2;o.add(ring);objs.ring=ring;o.position.copy(P(p.x+.5,p.y+.5));}
+    if(p.kind==='stand'){o=new THREE.Group();const s=new THREE.Shape();s.moveTo(0,0);s.bezierCurveTo(2,10,12,13,16,8);s.lineTo(16,0);s.lineTo(0,0);
+      const g=new THREE.ExtrudeGeometry(s,{depth:1,bevelEnabled:false});const m=mesh(g,p.color);m.rotation.y=Math.PI/2;m.position.set(-.5,0,8);o.add(m);
+      const leg=mesh(new THREE.BoxGeometry(5,4,1),0xC9A27A);leg.position.set(3,2,-4);o.add(leg);const leg2=leg.clone();leg2.position.z=4;o.add(leg2);
+      o.position.copy(P(p.x+1,p.y));o.position.z-=0;}
+    o.userData.home=o.position.clone();objs[p.id]=o;scene.add(o);});
+  // 로봇
   robot=new THREE.Group();
   const body=mesh(new THREE.BoxGeometry(ROBOT.l*.8,8,ROBOT.w-3),0xF5F5F0);body.position.y=6;robot.add(body);
   const top=mesh(new THREE.BoxGeometry(9,1.5,9),0xF6D57A);top.position.set(-1,10.7,0);robot.add(top);
@@ -368,47 +382,53 @@ function init(){inited=true;
   const sensor=mesh(new THREE.BoxGeometry(1.5,2.5,6),0x333333);sensor.position.set(ROBOT.l/2-1,5,0);robot.add(sensor);
   blinkMat=new THREE.MeshStandardMaterial({color:0x66ddff,emissive:0x000000});
   [-1.5,1.5].forEach(z=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.9,12,8),blinkMat);e.position.set(ROBOT.l/2-.1,5,z);robot.add(e);});
-  const arm=mesh(new THREE.BoxGeometry(6,1,2),0x6CCBCB);arm.position.set(ROBOT.l/2+2,8,0);robot.add(arm);
-  scene.add(robot);placeRobot(4,BOARDS[3].path[0],0);
-  resize();new ResizeObserver(resize).observe(box);setCam('all');renderer.setAnimationLoop(tick);}
-function setCam(mode,n){let tgt=new THREE.Vector3(0,0,0),pos;
-  if(mode==='all'){pos=new THREE.Vector3(-120,175,190);}
-  else if(mode==='top'){pos=new THREE.Vector3(0,330,1);}
-  else{const b=BOARDS[n-1];tgt=P(n,b.W/2,b.H/2);const d=Math.max(b.W,b.H*1.6);pos=tgt.clone().add(new THREE.Vector3(-d*.35,d*1.0,d*.95));}
-  cam={pos,tgt,t:0};}
+  const arm=mesh(new THREE.BoxGeometry(6,1,2),0x6CCBCB);arm.position.set(ROBOT.l/2+2,8,0);robot.add(arm);objs.arm=arm;
+  scene.add(robot);placeRobot([20,47],0);
+  resize();new ResizeObserver(resize).observe(box);setCam();
+  renderer.setAnimationLoop(tick);}
+function setCam(top){if(top){camera.position.set(0,230,1);}else camera.position.set(-70,120,150);controls.target.set(0,0,0);controls.update();}
 function resize(){const w=box.clientWidth,h=box.clientHeight;if(!w)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
-function placeRobot(n,pt,heading){robot.position.copy(P(n,pt[0],pt[1]));robot.rotation.y=-heading;robot.userData.board=n;}
-function reset(){Object.values(objs).forEach(o=>{if(o.userData.home){if(o.parent!==scene)scene.attach(o);o.position.copy(o.userData.home);o.rotation.set(0,0,0);}});
-  if(objs.post&&objs.ring.parent!==objs.post){objs.post.add(objs.ring);objs.ring.position.set(0,4.6,0);objs.ring.rotation.set(Math.PI/2,0,0);}
+function placeRobot(pt,heading){robot.position.copy(P(pt[0],pt[1]));robot.rotation.y=-heading;}
+function reset(){Object.values(objs).forEach(o=>{if(o.userData.home)o.position.copy(o.userData.home);});
+  if(objs.ring){objs.ring.parent!==objs.post&&objs.post.add(objs.ring);objs.ring.position.set(0,3.2,0);}
+  ['cube1'].forEach(id=>{const c=objs[id];if(c.parent!==scene)scene.add(c);c.position.copy(c.userData.home);});
   blinkMat.emissive.setHex(0);}
-function play(n){if(!inited)return;reset();const b=BOARDS[n-1],pts=b.path;const segs=[];let h=Math.atan2(pts[1][1]-pts[0][1],pts[1][0]-pts[0][0]);const h0=h;
-  for(let i=1;i<pts.length;i++){const a=pts[i-1],c=pts[i];const nh=Math.atan2(c[1]-a[1],c[0]-a[0]);let dh=nh-h;while(dh>Math.PI)dh-=2*Math.PI;while(dh<-Math.PI)dh+=2*Math.PI;
-    const rev=Math.abs(dh)>Math.PI*0.9;if(!rev&&Math.abs(dh)>.01){segs.push({t:'turn',from:h,to:h+dh,a});h=h+dh;}segs.push({t:'move',a,b:c,h});}
-  anim={n,segs,i:0,t:0,done:false,hold:false};placeRobot(n,pts[0],h0);setCam('board',n);
-  document.getElementById('d3Status').textContent=`미션 ${'①②③④'[n-1]} ${b.name} · ${b.goal}`;}
+function play(n){if(!inited)return;reset();const m=MISSIONS[n-1];const pts=m.path;
+  // 구간: 회전 후 직진
+  const segs=[];let h=Math.atan2(pts[1][1]-pts[0][1],pts[1][0]-pts[0][0]);
+  for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];const nh=Math.atan2(b[1]-a[1],b[0]-a[0]);
+    let rev=false;let dh=nh-h;while(dh>Math.PI)dh-=2*Math.PI;while(dh<-Math.PI)dh+=2*Math.PI;
+    if(Math.abs(dh)>Math.PI*0.9&&i>1){rev=true;} // 뒤로 후진
+    if(!rev&&Math.abs(dh)>.01)segs.push({t:'turn',from:h,to:h+dh,a});
+    if(!rev)h=h+dh;
+    segs.push({t:'move',a,b,h,rev});}
+  anim={n,segs,i:0,t:0,h:Math.atan2(pts[1][1]-pts[0][1],pts[1][0]-pts[0][0]),done:false,end:0};
+  placeRobot(pts[0],anim.h);
+  document.getElementById('d3Status').textContent=`미션 ${'①②③④'[n-1]} ${m.name} · ${m.goal}`;}
 let last=performance.now();
 function tick(now){const dt=Math.min(.05,(now-last)/1000);last=now;
-  if(cam){cam.t=Math.min(1,cam.t+dt*1.6);camera.position.lerp(cam.pos,cam.t);controls.target.lerp(cam.tgt,cam.t);if(cam.t>=1)cam=null;}
   if(anim&&!anim.done){const s=anim.segs[anim.i];
-    if(s.t==='turn'){anim.t+=dt/0.7;const k=Math.min(1,anim.t);placeRobot(anim.n,s.a,s.from+(s.to-s.from)*k);if(k>=1){anim.i++;anim.t=0;}}
-    else{const len=Math.hypot(s.b[0]-s.a[0],s.b[1]-s.a[1]);anim.t+=dt*20/len;const k=Math.min(1,anim.t);
-      const x=s.a[0]+(s.b[0]-s.a[0])*k,y=s.a[1]+(s.b[1]-s.a[1])*k;placeRobot(anim.n,[x,y],s.h);effects(anim.n,x,y);if(k>=1){anim.i++;anim.t=0;}}
-    if(anim.i>=anim.segs.length){anim.done=true;finish(anim.n);}}
-  if(anim&&anim.done&&anim.n===3)blinkMat.emissive.setHex(Math.floor(now/250)%2?0xffcc00:0x000000);
+    if(s.t==='turn'){anim.t+=dt/0.7;const k=Math.min(1,anim.t);placeRobot(s.a,s.from+(s.to-s.from)*k);if(k>=1){anim.i++;anim.t=0;}}
+    else{const len=Math.hypot(s.b[0]-s.a[0],s.b[1]-s.a[1]);anim.t+=dt*22/len;const k=Math.min(1,anim.t);
+      const x=s.a[0]+(s.b[0]-s.a[0])*k,y=s.a[1]+(s.b[1]-s.a[1])*k;placeRobot([x,y],s.h);effects(anim.n,x,y,s.h);
+      if(k>=1){anim.i++;anim.t=0;}}
+    if(anim.i>=anim.segs.length){anim.done=true;anim.end=now;finish(anim.n);}}
+  if(anim&&anim.done&&anim.n===3){blinkMat.emissive.setHex(Math.floor(now/250)%2?0xffcc00:0x000000);}
   controls.update();renderer.render(scene,camera);}
-function effects(n,x,y){
-  if(n===1){const c=objs.cR;if(c.parent===scene&&x+ROBOT.l/2>=41.5&&y>40){robot.attach(c);}}
-  if(n===2&&objs.ring.parent===objs.post&&x>=23.5){robot.attach(objs.ring);}
-  if(n===2&&objs.ring.parent===robot){objs.ring.position.y=Math.min(objs.ring.position.y+.3,15);}
-  if(n===4){const w=objs.strand,front=x+ROBOT.l/2;const left=Math.max(28,front);w.position.copy(P(4,left+12,19.5));w.position.y=.1;}}
-function finish(n){if(n===1){const c=objs.cR;scene.attach(c);c.position.y=2.6;}
-  const msg={1:'빨강 블록 수거 완료 · 노랑·파랑도 같은 방식',2:'고리 빼내기 완료',3:'경고 구역 안 정지 · 경고 깜빡임',4:'좌초 고래 · 낙하 구역 도착'}[n];
+function effects(n,x,y,h){
+  if(n===4){const w=objs.strand,front=x+ROBOT.l/2,left=40;const cx=Math.max(left+12,front+12);w.position.copy(P(cx,47));}
+  if(n===1){const c=objs.cube1;if(c.parent===scene&&Math.abs(x-70)<1&&y<=27.5){robot.attach(c);c.position.set(ROBOT.l/2+3,9,0);}}
+  if(n===2&&objs.ring.parent===objs.post&&y<=30.5){robot.attach(objs.ring);}
+  if(n===2&&objs.ring.parent===robot){objs.ring.position.y=Math.min(objs.ring.position.y+.25,14);}
+}
+function finish(n){if(n===1){const c=objs.cube1;scene.attach(c);c.position.y=2.5;}
+  const msg={1:'블록 1개 수거 완료 · 나머지 2개도 같은 방식',2:'고리 빼내기 완료',3:'경고 구역 안 정지 · 경고 깜빡임',4:'좌초 고래 · 낙하 구역 도착'}[n];
   document.getElementById('d3Status').textContent=`미션 ${'①②③④'[n-1]} · ${msg}`;}
 window.addEventListener('show3d',()=>{if(!inited)init();else resize();});
 if(location.hash==='#view3d')init();
 document.querySelectorAll('#d3Btns .mbtn').forEach(b=>b.onclick=()=>{document.querySelectorAll('#d3Btns .mbtn').forEach(x=>x.setAttribute('aria-pressed',x===b));play(+b.dataset.m);});
-document.getElementById('camAll').onclick=()=>inited&&setCam('all');
-document.getElementById('camTop').onclick=()=>inited&&setCam('top');
+document.getElementById('camTop').onclick=()=>inited&&setCam(true);
+document.getElementById('camReset').onclick=()=>inited&&setCam(false);
 </script>
 
 </html>
